@@ -46,34 +46,6 @@ export default function Desktop({
       moved: false,
     }
 
-    const onMove = (ev) => {
-      const d = dragRef.current
-      if (!d || d.id !== app.id) return
-      const dx = ev.clientX - d.startX
-      const dy = ev.clientY - d.startY
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) d.moved = true
-      if (!d.moved) return
-      const x = Math.max(0, d.origX + dx)
-      const y = Math.max(0, Math.min(window.innerHeight - 60 - ICON_H, d.origY + dy))
-      updateIconPosition(app.id, { x, y })
-    }
-
-    const onUp = () => {
-      const d = dragRef.current
-      if (d?.moved) {
-        const snap = (v) => Math.round(v / GRID) * GRID
-        const finalX = Math.max(0, d.origX + (window.event ? 0 : 0))
-        // 最終位置は直近の update 済み。再スナップ用に current を読む代わりに計算
-        const lastX = d.origX + (d._lastDx || 0)
-        const lastY = d.origY + (d._lastDy || 0)
-        // onMove で毎回更新しているので、最後のイベント座標でスナップ
-      }
-      dragRef.current = null
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-    }
-
-    // track last delta for snap
     const onMoveTracked = (ev) => {
       const d = dragRef.current
       if (!d || d.id !== app.id) return
@@ -107,12 +79,15 @@ export default function Desktop({
 
   const handleIconDoubleClick = (id) => {
     if (dragRef.current?.moved) return
-    if (openApps[id]?.isOpen) focusApp(id)
-    else openApp(id)
+    if (openApps[id]?.isOpen) {
+      if (openApps[id].isMinimized) focusApp(id)
+      else focusApp(id)
+    } else openApp(id)
   }
 
   const closeCtx = useCallback(() => setCtxMenu(null), [])
 
+  // デスクトップ空白
   const handleDesktopContext = (e) => {
     e.preventDefault()
     setCtxMenu({
@@ -121,29 +96,84 @@ export default function Desktop({
       items: [
         { label: '表示を更新', icon: '🔄', onClick: () => window.location.reload() },
         { separator: true },
-        { label: '設定を開く', icon: '⚙️', onClick: () => openApp('settings') },
-        { label: 'ストアを開く', icon: '🛒', onClick: () => openApp('store') },
+        { label: '設定', icon: '⚙️', onClick: () => openApp('settings') },
+        { label: 'ストア', icon: '🛒', onClick: () => openApp('store') },
+        { label: 'PilotTerm', icon: '⬛', onClick: () => openApp('terminal') },
+        { separator: true },
         { label: '検索', icon: '🔍', onClick: () => setSearchOpen(true) },
       ],
     })
   }
 
+  // デスクトップアイコン
   const handleIconContext = (e, app) => {
     e.preventDefault()
     e.stopPropagation()
-    const isOpen = openApps[app.id]?.isOpen
+    const s = openApps[app.id]
+    const isOpen = s?.isOpen
+    const isMin = s?.isMinimized
     setCtxMenu({
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: '開く', icon: '▶️', onClick: () => openApp(app.id) },
-        { separator: true },
-        { label: '閉じる', icon: '✕', disabled: !isOpen, onClick: () => closeApp(app.id) },
         {
-          label: '最小化',
+          label: isOpen && isMin ? '元に戻す' : '開く',
+          icon: '▶️',
+          onClick: () => openApp(app.id),
+        },
+        { separator: true },
+        {
+          label: '最小化（稼働継続）',
           icon: '─',
-          disabled: !isOpen || openApps[app.id]?.isMinimized,
+          disabled: !isOpen || isMin,
           onClick: () => minimizeApp(app.id),
+        },
+        {
+          label: '最大化',
+          icon: '□',
+          disabled: !isOpen || isMin,
+          onClick: () => {
+            focusApp(app.id)
+            toggleMaximize(app.id)
+          },
+        },
+        { separator: true },
+        {
+          label: '閉じる（終了）',
+          icon: '✕',
+          disabled: !isOpen,
+          onClick: () => closeApp(app.id),
+        },
+      ],
+    })
+  }
+
+  // タスクバー上のアプリボタン
+  const handleTaskbarAppContext = (e, app) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const s = openApps[app.id]
+    const isOpen = s?.isOpen
+    setCtxMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: `${app.title} を開く`, icon: app.icon, onClick: () => openApp(app.id) },
+        {
+          label: isOpen && s.isMinimized ? 'ウィンドウを表示' : '最小化',
+          icon: '─',
+          disabled: !isOpen,
+          onClick: () => {
+            if (s?.isMinimized) focusApp(app.id)
+            else minimizeApp(app.id)
+          },
+        },
+        { separator: true },
+        {
+          label: 'ウィンドウを閉じる',
+          icon: '✕',
+          disabled: !isOpen,
+          onClick: () => closeApp(app.id),
         },
       ],
     })
@@ -248,10 +278,12 @@ export default function Desktop({
         onAppClick={(id) => {
           const s = openApps[id]
           if (s?.isOpen) {
+            // 最小化中 → 復元＆フォーカス / フォーカス中 → 最小化（閉じない）
             if (s.isMinimized || !s.isFocused) focusApp(id)
             else minimizeApp(id)
           } else openApp(id)
         }}
+        onAppContextMenu={handleTaskbarAppContext}
         onSearchClick={() => setSearchOpen((v) => !v)}
         searchOpen={searchOpen}
       />
