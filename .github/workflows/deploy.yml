@@ -10,7 +10,7 @@ permissions:
   pages: write
   id-token: write
 
-# 連続pushでも順番処理（進行中キャンセルせずキューイング）
+# 連続pushでも順番処理（進行中をキャンセルせずキューイング）
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -26,8 +26,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          # package-lock がある場合のみ cache 有効（なければ無視）
-          cache: ${{ hashFiles('package-lock.json') != '' && 'npm' || '' }}
 
       - name: Install dependencies
         run: npm install
