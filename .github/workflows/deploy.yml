@@ -3,9 +3,6 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: ['main']
-    paths-ignore:
-      - 'docs/**'
-      - 'index.html'
   workflow_dispatch:
 
 permissions:
@@ -32,8 +29,39 @@ jobs:
       - name: Install dependencies
         run: npm install --registry https://registry.npmjs.org/
 
+      # Vite 用のエントリが壊れていないか確認
+      - name: Ensure Vite entry
+        run: |
+          if ! grep -q 'src/main.jsx' index.html; then
+            cat > index.html <<'HTML'
+          <!doctype html>
+          <html lang="ja">
+            <head>
+              <meta charset="UTF-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+              <title>Pilot - Virtual OS Prototype</title>
+            </head>
+            <body class="overflow-hidden">
+              <div id="root"></div>
+              <script type="module" src="/src/main.jsx"></script>
+            </body>
+          </html>
+          HTML
+            sed -i 's/^          //' index.html
+          fi
+
       - name: Build
         run: npm run build
+
+      - name: Verify bundle size
+        run: |
+          SIZE=$(wc -c < dist/assets/*.js | awk '{print $1}')
+          echo "JS size: $SIZE"
+          if [ "$SIZE" -lt 50000 ]; then
+            echo "Bundle too small — React app not included"
+            ls -la dist/assets/
+            exit 1
+          fi
 
       - name: Copy sitemap into dist
         run: |
@@ -50,12 +78,13 @@ jobs:
           publish_dir: ./dist
           force_orphan: true
 
-      # Pages が main を配信している場合でも動くよう index.html を更新
-      - name: Update main index.html to CDN bundle
+      # main ブランチを Pages が配信する場合用（CDN 経由）
+      - name: Write pages-index.html artifact for main
         run: |
-          JS=$(ls dist/assets/*.js | head -1 | xargs -n1 basename)
-          CSS=$(ls dist/assets/*.css | head -1 | xargs -n1 basename)
-          cat > index.html <<EOF
+          JS=$(basename $(ls dist/assets/*.js | head -1))
+          CSS=$(basename $(ls dist/assets/*.css | head -1))
+          mkdir -p pages-root
+          cat > pages-root/index.html <<EOF
           <!doctype html>
           <html lang="ja">
             <head>
@@ -70,11 +99,12 @@ jobs:
             </body>
           </html>
           EOF
-          # strip leading spaces from heredoc
-          sed -i 's/^          //' index.html
+          sed -i 's/^          //' pages-root/index.html
+          # Vite 用 index は触らない。CDN 用を public ではなく専用ファイルとして main に置く
+          cp pages-root/index.html index.pages.html
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add index.html
-          git diff --staged --quiet && echo "index unchanged" && exit 0
-          git commit -m "chore: point index.html at latest gh-pages bundle [skip ci]"
-          git push origin HEAD:main
+          # main の配信向けに index.pages.html を更新（Vite の index.html は維持）
+          git add index.pages.html
+          git commit -m "chore: update index.pages.html CDN pointers [skip ci]" || true
+          git push origin HEAD:main || true
