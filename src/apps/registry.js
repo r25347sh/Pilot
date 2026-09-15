@@ -1,7 +1,5 @@
 /**
- * ベースアプリケーション定義
- * title / icon はここを単一ソースとして動的に参照する
- * ストアから追加されたアプリは localforage 経由でマージされる
+ * ベースアプリケーション定義（title/icon の単一ソース）
  */
 export const BASE_APPS = [
   {
@@ -19,6 +17,20 @@ export const BASE_APPS = [
     external: true,
   },
   {
+    id: 'reitansai-cms',
+    title: '麗探祭 CMS',
+    icon: '📝',
+    src: 'https://r25347sh.github.io/reitansai/admin.html',
+    external: true,
+  },
+  {
+    id: 'asobiseminar-cms',
+    title: 'Asobi CMS',
+    icon: '✏️',
+    src: 'https://r25347sh.github.io/asobiseminar/login.html',
+    external: true,
+  },
+  {
     id: 'settings',
     title: '設定',
     icon: '⚙️',
@@ -30,11 +42,14 @@ export const BASE_APPS = [
     icon: '🛒',
     internal: 'store',
   },
+  {
+    id: 'terminal',
+    title: 'PilotTerm',
+    icon: '⬛',
+    internal: 'terminal',
+  },
 ]
 
-/**
- * ベース + インストール済みをマージ（id重複はインストール側優先）
- */
 export function mergeApps(installed = []) {
   const map = new Map()
   BASE_APPS.forEach((a) => map.set(a.id, { ...a }))
