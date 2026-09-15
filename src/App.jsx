@@ -24,48 +24,47 @@ export default function App() {
   }, [])
 
   const openApp = useCallback((id) => {
-    setOpenApps((prev) => {
-      const nextZ = maxZ + 1
-      setMaxZ(nextZ)
-      return {
-        ...prev,
-        [id]: {
+    setMaxZ((prevMax) => {
+      const nextZ = prevMax + 1
+      setOpenApps((prev) => {
+        const updated = { ...prev }
+        // 他をunfocus
+        Object.keys(updated).forEach((k) => {
+          updated[k] = { ...updated[k], isFocused: false }
+        })
+        // 新規 or 既存を開く
+        updated[id] = {
           isOpen: true,
           isFocused: true,
           zIndex: nextZ,
-          // Desktop用の位置・サイズ初期値
-          x: 80 + Object.keys(prev).length * 30,
-          y: 60 + Object.keys(prev).length * 30,
-          width: 520,
-          height: 380,
-        },
-      }
-    })
-    // 他をunfocus
-    setOpenApps((prev) => {
-      const updated = { ...prev }
-      Object.keys(updated).forEach((k) => {
-        if (k !== id) updated[k] = { ...updated[k], isFocused: false }
+          x: prev[id]?.x ?? (80 + Object.keys(prev).length * 30),
+          y: prev[id]?.y ?? (60 + Object.keys(prev).length * 30),
+          width: prev[id]?.width ?? 520,
+          height: prev[id]?.height ?? 380,
+        }
+        return updated
       })
-      return updated
+      return nextZ
     })
-  }, [maxZ])
+  }, [])
 
   const focusApp = useCallback((id) => {
-    setOpenApps((prev) => {
-      const nextZ = maxZ + 1
-      setMaxZ(nextZ)
-      const updated = { ...prev }
-      Object.keys(updated).forEach((k) => {
-        updated[k] = {
-          ...updated[k],
-          isFocused: k === id,
-          zIndex: k === id ? nextZ : updated[k].zIndex,
-        }
+    setMaxZ((prevMax) => {
+      const nextZ = prevMax + 1
+      setOpenApps((prev) => {
+        const updated = { ...prev }
+        Object.keys(updated).forEach((k) => {
+          updated[k] = {
+            ...updated[k],
+            isFocused: k === id,
+            zIndex: k === id ? nextZ : updated[k].zIndex,
+          }
+        })
+        return updated
       })
-      return updated
+      return nextZ
     })
-  }, [maxZ])
+  }, [])
 
   const closeApp = useCallback((id) => {
     setOpenApps((prev) => {
