@@ -9,6 +9,7 @@ import {
   getIconPositions,
   setIconPositions,
   getInstalledApps,
+  setInstalledApps,
 } from './lib/storage'
 
 const DEFAULT_WALLPAPER = WALLPAPERS[0].value
@@ -25,37 +26,44 @@ export default function App() {
   const [maxZ, setMaxZ] = useState(10)
 
   const [apps, setApps] = useState(() => mergeApps([]))
+  const [installedList, setInstalledList] = useState([])
   const [iconPositions, setIconPositionsState] = useState({})
 
   const [themePref, setThemePref] = useState('system')
   const [wallpaper, setWallpaper] = useState(DEFAULT_WALLPAPER)
   const [resolvedTheme, setResolvedTheme] = useState(getSystemTheme)
 
-  // localforage から初期ロード
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const [settings, positions, installed] = await Promise.all([
-        getSettings(),
-        getIconPositions(),
-        getInstalledApps(),
-      ])
-      if (cancelled) return
+      try {
+        const [settings, positions, installed] = await Promise.all([
+          getSettings(),
+          getIconPositions(),
+          getInstalledApps(),
+        ])
+        if (cancelled) return
 
-      if (settings) {
-        if (settings.theme) setThemePref(settings.theme)
-        if (settings.wallpaper) setWallpaper(settings.wallpaper)
+        if (settings) {
+          if (settings.theme) setThemePref(settings.theme)
+          if (settings.wallpaper) setWallpaper(settings.wallpaper)
+        }
+        if (positions && typeof positions === 'object') {
+          setIconPositionsState(positions)
+        }
+        const list = Array.isArray(installed) ? installed : []
+        setInstalledList(list)
+        setApps(mergeApps(list))
+      } catch (e) {
+        console.error('storage load failed', e)
+        setApps(mergeApps([]))
+      } finally {
+        if (!cancelled) setReady(true)
       }
-      if (positions && typeof positions === 'object') {
-        setIconPositionsState(positions)
-      }
-      setApps(mergeApps(installed || []))
-      setReady(true)
     })()
     return () => { cancelled = true }
   }, [])
 
-  // テーマ解決: system は prefers-color-scheme を本当に使う
   useEffect(() => {
     const apply = () => {
       const resolved = themePref === 'system' ? getSystemTheme() : themePref
@@ -63,7 +71,6 @@ export default function App() {
       document.documentElement.setAttribute('data-theme', resolved)
     }
     apply()
-
     if (themePref !== 'system') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const handler = () => apply()
@@ -71,10 +78,9 @@ export default function App() {
     return () => mq.removeEventListener('change', handler)
   }, [themePref])
 
-  // 設定を localforage に保存
   useEffect(() => {
     if (!ready) return
-    setSettings({ theme: themePref, wallpaper })
+    setSettings({ theme: themePref, wallpaper }).catch(() => {})
   }, [themePref, wallpaper, ready])
 
   useEffect(() => {
@@ -87,8 +93,32 @@ export default function App() {
   const updateIconPosition = useCallback((id, pos) => {
     setIconPositionsState((prev) => {
       const next = { ...prev, [id]: pos }
-      setIconPositions(next)
+      setIconPositions(next).catch(() => {})
       return next
+    })
+  }, [])
+
+  const installApp = useCallback(async (item) => {
+    setInstalledList((prev) => {
+      if (prev.some((a) => a.id === item.id)) return prev
+      const next = [...prev, item]
+      setInstalledApps(next).catch(() => {})
+      setApps(mergeApps(next))
+      return next
+    })
+  }, [])
+
+  const uninstallApp = useCallback(async (id) => {
+    setInstalledList((prev) => {
+      const next = prev.filter((a) => a.id !== id)
+      setInstalledApps(next).catch(() => {})
+      setApps(mergeApps(next))
+      return next
+    })
+    setOpenApps((prev) => {
+      const u = { ...prev }
+      delete u[id]
+      return u
     })
   }, [])
 
@@ -109,7 +139,7 @@ export default function App() {
             zIndex: nextZ,
           }
         } else {
-          const isCompact = id === 'settings' || id === 'store'
+          const isCompact = id === 'settings' || id === 'store' || id === 'taskmanager'
           updated[id] = {
             isOpen: true,
             isFocused: true,
@@ -234,6 +264,20 @@ export default function App() {
     onWallpaperChange: setWallpaper,
   }
 
+  const storeProps = {
+    installedIds: installedList.map((a) => a.id),
+    onInstall: installApp,
+    onUninstall: uninstallApp,
+  }
+
+  const taskManagerProps = {
+    apps,
+    openApps,
+    focusApp,
+    minimizeApp,
+    closeApp,
+  }
+
   const commonProps = {
     apps,
     openApps,
@@ -247,6 +291,8 @@ export default function App() {
     wallpaper,
     resolvedTheme,
     settingsProps,
+    storeProps,
+    taskManagerProps,
     iconPositions,
     updateIconPosition,
   }
