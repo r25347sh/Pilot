@@ -23,6 +23,8 @@ export default function Desktop({
   wallpaper,
   resolvedTheme,
   settingsProps,
+  storeProps,
+  taskManagerProps,
   iconPositions,
   updateIconPosition,
 }) {
@@ -79,15 +81,12 @@ export default function Desktop({
 
   const handleIconDoubleClick = (id) => {
     if (dragRef.current?.moved) return
-    if (openApps[id]?.isOpen) {
-      if (openApps[id].isMinimized) focusApp(id)
-      else focusApp(id)
-    } else openApp(id)
+    if (openApps[id]?.isOpen) focusApp(id)
+    else openApp(id)
   }
 
   const closeCtx = useCallback(() => setCtxMenu(null), [])
 
-  // デスクトップ空白
   const handleDesktopContext = (e) => {
     e.preventDefault()
     setCtxMenu({
@@ -105,7 +104,6 @@ export default function Desktop({
     })
   }
 
-  // デスクトップアイコン
   const handleIconContext = (e, app) => {
     e.preventDefault()
     e.stopPropagation()
@@ -148,7 +146,6 @@ export default function Desktop({
     })
   }
 
-  // タスクバー上のアプリボタン
   const handleTaskbarAppContext = (e, app) => {
     e.preventDefault()
     e.stopPropagation()
@@ -229,6 +226,8 @@ export default function Desktop({
             onToggleMaximize={() => toggleMaximize(app.id)}
             onToggleFullscreen={() => toggleFullscreen(app.id)}
             settingsProps={settingsProps}
+            storeProps={storeProps}
+            taskManagerProps={taskManagerProps}
           />
         )
       })}
@@ -278,7 +277,6 @@ export default function Desktop({
         onAppClick={(id) => {
           const s = openApps[id]
           if (s?.isOpen) {
-            // 最小化中 → 復元＆フォーカス / フォーカス中 → 最小化（閉じない）
             if (s.isMinimized || !s.isFocused) focusApp(id)
             else minimizeApp(id)
           } else openApp(id)
