@@ -9,7 +9,25 @@ html, body, #root {
   overflow: hidden;
 }
 
-/* スクロールバー非表示（モバイル向け） */
 ::-webkit-scrollbar {
-  display: none;
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.4);
+  border-radius: 3px;
+}
+
+/* 設定アプリ用テーマ変数 */
+:root,
+[data-theme="dark"] {
+  --settings-bg: #1e1e1e;
+  --settings-text: #f0f0f0;
+  --settings-border: #3a3a3a;
+}
+
+[data-theme="light"] {
+  --settings-bg: #f3f3f3;
+  --settings-text: #1a1a1a;
+  --settings-border: #d0d0d0;
 }
