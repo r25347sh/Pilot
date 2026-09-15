@@ -72,7 +72,7 @@ function BatteryIcon({ level, charging }) {
   )
 }
 
-export default function Taskbar({ apps, openApps, onAppClick, onSearchClick, searchOpen }) {
+export default function Taskbar({ apps, openApps, onAppClick, onAppContextMenu, onSearchClick, searchOpen }) {
   const [time, setTime] = useState(new Date())
   const battery = useBattery()
   const network = useNetwork()
@@ -91,13 +91,12 @@ export default function Taskbar({ apps, openApps, onAppClick, onSearchClick, sea
         color: 'var(--tb-text)',
         borderColor: 'var(--tb-border)',
       }}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <div className="flex items-center gap-1">
         <button
           onClick={onSearchClick}
-          className={`w-10 h-10 rounded-md flex items-center justify-center transition-colors ${
-            searchOpen ? 'bg-black/10 dark:bg-white/20' : 'hover:bg-black/5 dark:hover:bg-white/10'
-          }`}
+          className="w-10 h-10 rounded-md flex items-center justify-center transition-colors hover:bg-[var(--hover-bg)]"
           style={{ background: searchOpen ? 'var(--hover-bg)' : undefined }}
           title="スタート"
         >
@@ -131,9 +130,10 @@ export default function Taskbar({ apps, openApps, onAppClick, onSearchClick, sea
             <button
               key={app.id}
               onClick={() => onAppClick(app.id)}
+              onContextMenu={(e) => onAppContextMenu?.(e, app)}
               className="relative w-10 h-10 rounded-md flex items-center justify-center transition-colors hover:bg-[var(--hover-bg)]"
               style={{ background: isFocused ? 'var(--hover-bg)' : isOpen ? 'var(--input-bg)' : undefined }}
-              title={app.title}
+              title={app.title + (isMinimized ? ' (最小化)' : isOpen ? ' (実行中)' : '')}
             >
               <span className="text-xl leading-none">{app.icon}</span>
               {isOpen && (
@@ -155,7 +155,6 @@ export default function Taskbar({ apps, openApps, onAppClick, onSearchClick, sea
         <span className="hidden sm:inline uppercase opacity-70" title="言語">
           {lang.split('-')[0]}
         </span>
-
         <span
           className="flex items-center gap-1"
           title={network.online ? `オンライン${network.type ? ` (${network.type})` : ''}` : 'オフライン'}
@@ -171,9 +170,7 @@ export default function Taskbar({ apps, openApps, onAppClick, onSearchClick, sea
           )}
           {network.type && <span className="hidden lg:inline opacity-60">{network.type}</span>}
         </span>
-
         <BatteryIcon level={battery.level} charging={battery.charging} />
-
         <div className="text-right leading-tight tabular-nums pl-1 ml-0.5 border-l" style={{ borderColor: 'var(--tb-border)' }}>
           <div>{time.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</div>
           <div className="opacity-60 text-[10px] hidden sm:block">
