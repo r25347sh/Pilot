@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import Desktop from './components/desktop/Desktop'
 import HomeScreen from './components/mobile/HomeScreen'
+import { WALLPAPERS } from './components/desktop/SettingsApp'
 
-// 疑似アプリケーション（外部GitHub Pagesサイトをiframeで読み込み）
 const APPS = [
   {
     id: 'reitansai',
-    title: '麗澤祭',
+    title: '麗探祭',
     icon: '🎪',
     src: 'https://r25347sh.github.io/reitansai/',
     external: true,
@@ -18,12 +18,58 @@ const APPS = [
     src: 'https://r25347sh.github.io/asobiseminar/',
     external: true,
   },
+  {
+    id: 'settings',
+    title: '設定',
+    icon: '⚙️',
+    internal: true, // Reactコンポーネントで描画
+  },
 ]
+
+const DEFAULT_WALLPAPER = WALLPAPERS[0].value
+
+function getSystemTheme() {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem('pilot-settings')
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return { theme: 'dark', wallpaper: DEFAULT_WALLPAPER }
+}
 
 export default function App() {
   const [isMobile, setIsMobile] = useState(false)
   const [openApps, setOpenApps] = useState({})
   const [maxZ, setMaxZ] = useState(10)
+
+  const saved = loadSettings()
+  const [themePref, setThemePref] = useState(saved.theme || 'dark')
+  const [wallpaper, setWallpaper] = useState(saved.wallpaper || DEFAULT_WALLPAPER)
+  const [resolvedTheme, setResolvedTheme] = useState(
+    saved.theme === 'system' ? getSystemTheme() : saved.theme || 'dark'
+  )
+
+  // テーマ解決 & 永続化
+  useEffect(() => {
+    const resolved = themePref === 'system' ? getSystemTheme() : themePref
+    setResolvedTheme(resolved)
+    document.documentElement.setAttribute('data-theme', resolved)
+    localStorage.setItem(
+      'pilot-settings',
+      JSON.stringify({ theme: themePref, wallpaper })
+    )
+  }, [themePref, wallpaper])
+
+  useEffect(() => {
+    if (themePref !== 'system') return
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => setResolvedTheme(mq.matches ? 'dark' : 'light')
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [themePref])
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
@@ -42,7 +88,6 @@ export default function App() {
         })
         const existing = prev[id]
         if (existing?.isOpen) {
-          // 既に開いている → フォーカス＋最小化解除
           updated[id] = {
             ...existing,
             isFocused: true,
@@ -50,6 +95,7 @@ export default function App() {
             zIndex: nextZ,
           }
         } else {
+          const isSettings = id === 'settings'
           updated[id] = {
             isOpen: true,
             isFocused: true,
@@ -59,9 +105,9 @@ export default function App() {
             zIndex: nextZ,
             x: 100 + Object.keys(prev).length * 28,
             y: 50 + Object.keys(prev).length * 28,
-            width: 900,
-            height: 560,
-            prevRect: null, // maximize/fullscreen からの復元用
+            width: isSettings ? 640 : 900,
+            height: isSettings ? 480 : 560,
+            prevRect: null,
           }
         }
         return updated
@@ -80,7 +126,6 @@ export default function App() {
             ...updated[k],
             isFocused: k === id,
             zIndex: k === id ? nextZ : updated[k].zIndex,
-            // タスクバーからクリック時は最小化解除
             isMinimized: k === id ? false : updated[k].isMinimized,
           }
         })
@@ -105,7 +150,6 @@ export default function App() {
     }))
   }, [])
 
-  // 最小化
   const minimizeApp = useCallback((id) => {
     setOpenApps((prev) => ({
       ...prev,
@@ -113,13 +157,11 @@ export default function App() {
     }))
   }, [])
 
-  // 最大化 / 復元
   const toggleMaximize = useCallback((id) => {
     setOpenApps((prev) => {
       const cur = prev[id]
       if (!cur) return prev
       if (cur.isMaximized || cur.isFullscreen) {
-        // 復元
         const rect = cur.prevRect || { x: 100, y: 50, width: 900, height: 560 }
         return {
           ...prev,
@@ -132,7 +174,6 @@ export default function App() {
           },
         }
       }
-      // 最大化
       return {
         ...prev,
         [id]: {
@@ -143,13 +184,12 @@ export default function App() {
           x: 0,
           y: 0,
           width: window.innerWidth,
-          height: window.innerHeight - 48, // タスクバー分
+          height: window.innerHeight - 48,
         },
       }
     })
   }, [])
 
-  // 全画面
   const toggleFullscreen = useCallback((id) => {
     setOpenApps((prev) => {
       const cur = prev[id]
@@ -185,6 +225,13 @@ export default function App() {
     })
   }, [])
 
+  const settingsProps = {
+    theme: themePref,
+    wallpaper,
+    onThemeChange: setThemePref,
+    onWallpaperChange: setWallpaper,
+  }
+
   const commonProps = {
     apps: APPS,
     openApps,
@@ -195,6 +242,9 @@ export default function App() {
     minimizeApp,
     toggleMaximize,
     toggleFullscreen,
+    wallpaper,
+    resolvedTheme,
+    settingsProps,
   }
 
   if (isMobile) {
