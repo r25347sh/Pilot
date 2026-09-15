@@ -4,97 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Pilot - Virtual OS Prototype</title>
-    <!-- GitHub Pages が main のソースを配信しても動くよう、gh-pages のビルド成果物を CDN から読み込む -->
-    <script type="module" crossorigin src="https://cdn.jsdelivr.net/gh/r25347sh/Pilot@gh-pages/assets/index-DgnfJowR.js"></script>
-    <link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/gh/r25347sh/Pilot@gh-pages/assets/index-BHO9djoO.css" />
   </head>
   <body class="overflow-hidden">
     <div id="root"></div>
-    <!-- 画面表示用のコンソールコンテナ -->
-<div id="custom-console-container" style="
-    position: fixed; 
-    bottom: 0; 
-    left: 0; 
-    width: 100%; 
-    height: 200px; 
-    background: rgba(30, 30, 30, 0.95); 
-    color: #00ff00; 
-    font-family: monospace; 
-    font-size: 12px; 
-    z-index: 999999; 
-    border-top: 3px solid #555; 
-    display: flex; 
-    flex-direction: column;
-">
-    <!-- ヘッダー（タイトルとクリアボタン） -->
-    <div style="background: #2d2d2d; padding: 5px 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444;">
-        <span style="color: #fff; font-weight: bold;">📊 簡易画面上コンソール</span>
-        <button onclick="document.getElementById('custom-console-log').innerHTML = '';" style="background: #555; color: white; border: none; padding: 2px 8px; cursor: pointer; border-radius: 3px;">Clear</button>
-    </div>
-    <!-- ログ出力エリア -->
-    <div id="custom-console-log" style="flex: 1; overflow-y: auto; padding: 10px; white-space: pre-wrap; word-break: break-all;"></div>
-</div>
-
-<script>
-(function() {
-    const logArea = document.getElementById('custom-console-log');
-
-    // 画面にログを追記する関数
-    function appendLog(message, type = 'log') {
-        const line = document.createElement('div');
-        line.style.marginBottom = '5px';
-        line.style.borderBottom = '1px solid #333';
-        line.style.paddingBottom = '2px';
-        
-        // ログの種類によって色を変える
-        if (type === 'error') {
-            line.style.color = '#ff6b6b';
-            line.innerText = `❌ [Error] ${message}`;
-        } else if (type === 'warn') {
-            line.style.color = '#ffd166';
-            line.innerText = `⚠️ [Warn] ${message}`;
-        } else {
-            line.style.color = '#06d6a0';
-            line.innerText = `ℹ️ [Log] ${message}`;
-        }
-        
-        logArea.appendChild(line);
-        logArea.scrollTop = logArea.scrollHeight; // 常に最新のログにスクロール
-    }
-
-    // 1. 通常の console.log などを乗っ取る
-    const originalLog = console.log;
-    const originalError = console.error;
-    const originalWarn = console.warn;
-
-    console.log = function(...args) {
-        originalLog.apply(console, args);
-        appendLog(args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '), 'log');
-    };
-
-    console.error = function(...args) {
-        originalError.apply(console, args);
-        appendLog(args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '), 'error');
-    };
-
-    console.warn = function(...args) {
-        originalWarn.apply(console, args);
-        appendLog(args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' '), 'warn');
-    };
-
-    // 2. JavaScriptの実行エラー（赤文字のエラー）をキャッチする
-    window.addEventListener('error', function(event) {
-        appendLog(`${event.message} (at ${event.filename}:${event.lineno}:${event.colno})`, 'error');
-    });
-
-    // 3. 非同期処理（Promise）のエラーをキャッチする
-    window.addEventListener('unhandledrejection', function(event) {
-        appendLog(`Unhandled Promise Rejection: ${event.reason}`, 'error');
-    });
-
-    console.log("カスタムコンソールが起動しました。");
-})();
-</script>
-
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
