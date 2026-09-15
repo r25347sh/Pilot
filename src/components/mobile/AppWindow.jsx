@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 
 export default function AppWindow({ app, onClose }) {
-  const iframeSrc = `${import.meta.env.BASE_URL}${app.src}`
+  const iframeSrc = app.external ? app.src : `${import.meta.env.BASE_URL}${app.src}`
 
   return (
     <motion.div
@@ -29,7 +29,8 @@ export default function AppWindow({ app, onClose }) {
           src={iframeSrc}
           title={app.title}
           className="absolute inset-0 w-full h-full border-0"
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
+          allow="fullscreen"
         />
       </div>
     </motion.div>
