@@ -5,6 +5,7 @@ on:
     branches: ['main']
     paths-ignore:
       - 'docs/**'
+      - 'index.html'
   workflow_dispatch:
 
 permissions:
@@ -40,11 +41,40 @@ jobs:
             mkdir -p dist/sitemap
             cp -r sitemap/* dist/sitemap/ || true
           fi
+          touch dist/.nojekyll
 
-      # Pages の公開元を「gh-pages / root」に設定してください
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           force_orphan: true
+
+      # Pages が main を配信している場合でも動くよう index.html を更新
+      - name: Update main index.html to CDN bundle
+        run: |
+          JS=$(ls dist/assets/*.js | head -1 | xargs -n1 basename)
+          CSS=$(ls dist/assets/*.css | head -1 | xargs -n1 basename)
+          cat > index.html <<EOF
+          <!doctype html>
+          <html lang="ja">
+            <head>
+              <meta charset="UTF-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+              <title>Pilot - Virtual OS Prototype</title>
+              <script type="module" crossorigin src="https://cdn.jsdelivr.net/gh/r25347sh/Pilot@gh-pages/assets/${JS}"></script>
+              <link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/gh/r25347sh/Pilot@gh-pages/assets/${CSS}" />
+            </head>
+            <body class="overflow-hidden">
+              <div id="root"></div>
+            </body>
+          </html>
+          EOF
+          # strip leading spaces from heredoc
+          sed -i 's/^          //' index.html
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --staged --quiet && echo "index unchanged" && exit 0
+          git commit -m "chore: point index.html at latest gh-pages bundle [skip ci]"
+          git push origin HEAD:main
