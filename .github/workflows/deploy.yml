@@ -6,17 +6,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
-# 連続pushでも順番処理（進行中をキャンセルせずキューイング）
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -28,31 +27,37 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --registry https://registry.npmjs.org/
 
       - name: Build
         run: npm run build
 
       - name: Copy sitemap into dist
         run: |
-          mkdir -p dist/sitemap
-          cp -r sitemap/* dist/sitemap/
+          if [ -d sitemap ]; then
+            mkdir -p dist/sitemap
+            cp -r sitemap/* dist/sitemap/
+          fi
 
+      # GitHub Pages が「ブランチからデプロイ」の場合でも動くよう gh-pages に push
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          force_orphan: true
+
+      # Actions ソース設定の場合用
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        continue-on-error: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: './dist'
+        continue-on-error: true
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
+      - name: Deploy Pages (Actions)
         uses: actions/deploy-pages@v4
+        continue-on-error: true
