@@ -36,10 +36,10 @@ jobs:
         run: |
           if [ -d sitemap ]; then
             mkdir -p dist/sitemap
-            cp -r sitemap/* dist/sitemap/
+            cp -r sitemap/* dist/sitemap/ || true
           fi
 
-      # GitHub Pages が「ブランチからデプロイ」の場合でも動くよう gh-pages に push
+      # 1) gh-pages ブランチへ（推奨: Pages ソース = gh-pages / root）
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
@@ -47,17 +47,16 @@ jobs:
           publish_dir: ./dist
           force_orphan: true
 
-      # Actions ソース設定の場合用
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-        continue-on-error: true
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: './dist'
-        continue-on-error: true
-
-      - name: Deploy Pages (Actions)
-        uses: actions/deploy-pages@v4
-        continue-on-error: true
+      # 2) docs/ にもコミット（Pages ソース = main / docs の場合）
+      - name: Publish to docs folder on main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          rm -rf docs
+          mkdir -p docs
+          cp -r dist/* docs/
+          # base が /Pilot/ なので docs 配下で問題なし
+          git add -A docs
+          git diff --staged --quiet && echo "No docs changes" && exit 0
+          git commit -m "chore: update docs/ for GitHub Pages"
+          git push origin HEAD:main
