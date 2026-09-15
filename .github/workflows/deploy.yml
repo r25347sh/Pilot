@@ -3,6 +3,8 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: ['main']
+    paths-ignore:
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:
@@ -39,24 +41,10 @@ jobs:
             cp -r sitemap/* dist/sitemap/ || true
           fi
 
-      # 1) gh-pages ブランチへ（推奨: Pages ソース = gh-pages / root）
+      # Pages の公開元を「gh-pages / root」に設定してください
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
           force_orphan: true
-
-      # 2) docs/ にもコミット（Pages ソース = main / docs の場合）
-      - name: Publish to docs folder on main
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          rm -rf docs
-          mkdir -p docs
-          cp -r dist/* docs/
-          # base が /Pilot/ なので docs 配下で問題なし
-          git add -A docs
-          git diff --staged --quiet && echo "No docs changes" && exit 0
-          git commit -m "chore: update docs/ for GitHub Pages"
-          git push origin HEAD:main
