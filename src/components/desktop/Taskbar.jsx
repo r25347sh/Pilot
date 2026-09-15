@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 
 function useBattery() {
   const [battery, setBattery] = useState({ level: null, charging: false })
-
   useEffect(() => {
     let batt = null
     const update = () => {
@@ -24,20 +23,17 @@ function useBattery() {
       }
     }
   }, [])
-
   return battery
 }
 
 function useNetwork() {
   const [online, setOnline] = useState(navigator.onLine)
   const [type, setType] = useState(null)
-
   useEffect(() => {
     const on = () => setOnline(true)
     const off = () => setOnline(false)
     window.addEventListener('online', on)
     window.addEventListener('offline', off)
-
     const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection
     if (conn) {
       const update = () => setType(conn.effectiveType || conn.type || null)
@@ -54,7 +50,6 @@ function useNetwork() {
       window.removeEventListener('offline', off)
     }
   }, [])
-
   return { online, type }
 }
 
@@ -89,36 +84,42 @@ export default function Taskbar({ apps, openApps, onAppClick, onSearchClick, sea
   }, [])
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 h-12 bg-[#1c1c1c]/90 backdrop-blur-xl border-t border-white/5 flex items-center justify-center gap-1 z-[9999] px-2">
-      {/* 中央グループ */}
+    <div
+      className="absolute bottom-0 left-0 right-0 h-12 backdrop-blur-xl flex items-center justify-center gap-1 z-[9999] px-2 border-t"
+      style={{
+        background: 'var(--tb-bg)',
+        color: 'var(--tb-text)',
+        borderColor: 'var(--tb-border)',
+      }}
+    >
       <div className="flex items-center gap-1">
         <button
           onClick={onSearchClick}
           className={`w-10 h-10 rounded-md flex items-center justify-center transition-colors ${
-            searchOpen ? 'bg-white/20' : 'hover:bg-white/10'
+            searchOpen ? 'bg-black/10 dark:bg-white/20' : 'hover:bg-black/5 dark:hover:bg-white/10'
           }`}
+          style={{ background: searchOpen ? 'var(--hover-bg)' : undefined }}
           title="スタート"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z" />
           </svg>
         </button>
 
         <button
           onClick={onSearchClick}
-          className={`h-10 px-3 rounded-md flex items-center gap-2 transition-colors ${
-            searchOpen ? 'bg-white/15' : 'hover:bg-white/10'
-          }`}
+          className="h-10 px-3 rounded-md flex items-center gap-2 transition-colors hover:bg-[var(--hover-bg)]"
+          style={{ background: searchOpen ? 'var(--hover-bg)' : undefined }}
           title="検索"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/80">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.8">
             <circle cx="11" cy="11" r="7" />
             <line x1="16.5" y1="16.5" x2="21" y2="21" />
           </svg>
-          <span className="text-white/60 text-xs hidden md:inline">検索</span>
+          <span className="text-xs opacity-60 hidden md:inline">検索</span>
         </button>
 
-        <div className="w-px h-5 bg-white/15 mx-1" />
+        <div className="w-px h-5 mx-1 opacity-20" style={{ background: 'currentColor' }} />
 
         {apps.map((app) => {
           const s = openApps[app.id]
@@ -130,21 +131,19 @@ export default function Taskbar({ apps, openApps, onAppClick, onSearchClick, sea
             <button
               key={app.id}
               onClick={() => onAppClick(app.id)}
-              className={`relative w-10 h-10 rounded-md flex items-center justify-center transition-colors ${
-                isFocused
-                  ? 'bg-white/20'
-                  : isOpen
-                  ? 'bg-white/10 hover:bg-white/15'
-                  : 'hover:bg-white/10'
-              }`}
+              className="relative w-10 h-10 rounded-md flex items-center justify-center transition-colors hover:bg-[var(--hover-bg)]"
+              style={{ background: isFocused ? 'var(--hover-bg)' : isOpen ? 'var(--input-bg)' : undefined }}
               title={app.title}
             >
               <span className="text-xl leading-none">{app.icon}</span>
               {isOpen && (
                 <span
-                  className={`absolute bottom-0.5 left-1/2 -translate-x-1/2 h-0.5 rounded-full transition-all ${
-                    isFocused ? 'w-4 bg-white' : isMinimized ? 'w-2 bg-white/50' : 'w-3 bg-white/70'
-                  }`}
+                  className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-0.5 rounded-full transition-all"
+                  style={{
+                    width: isFocused ? 16 : isMinimized ? 8 : 12,
+                    background: 'currentColor',
+                    opacity: isFocused ? 1 : 0.5,
+                  }}
                 />
               )}
             </button>
@@ -152,14 +151,11 @@ export default function Taskbar({ apps, openApps, onAppClick, onSearchClick, sea
         })}
       </div>
 
-      {/* システムトレイ */}
-      <div className="absolute right-2 flex items-center gap-2.5 text-white/80 text-xs">
-        {/* 言語 */}
+      <div className="absolute right-2 flex items-center gap-2.5 text-xs" style={{ color: 'var(--tb-text)' }}>
         <span className="hidden sm:inline uppercase opacity-70" title="言語">
           {lang.split('-')[0]}
         </span>
 
-        {/* ネットワーク */}
         <span
           className="flex items-center gap-1"
           title={network.online ? `オンライン${network.type ? ` (${network.type})` : ''}` : 'オフライン'}
@@ -176,11 +172,9 @@ export default function Taskbar({ apps, openApps, onAppClick, onSearchClick, sea
           {network.type && <span className="hidden lg:inline opacity-60">{network.type}</span>}
         </span>
 
-        {/* バッテリー */}
         <BatteryIcon level={battery.level} charging={battery.charging} />
 
-        {/* 時計・日付 */}
-        <div className="text-right leading-tight tabular-nums pl-1 border-l border-white/10 ml-0.5">
+        <div className="text-right leading-tight tabular-nums pl-1 ml-0.5 border-l" style={{ borderColor: 'var(--tb-border)' }}>
           <div>{time.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</div>
           <div className="opacity-60 text-[10px] hidden sm:block">
             {time.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', weekday: 'short' })}
