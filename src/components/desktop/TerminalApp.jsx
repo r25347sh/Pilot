@@ -3,20 +3,6 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 /**
  * PilotScript — 独自言語
  * 複数行を書いて Run / Ctrl+Enter で実行
- *
- * 文法（1行1文、# コメント）:
- *   SAY <text>           出力
- *   CLEAR                画面クリア
- *   LET <name> = <expr>  変数（数値・文字列）
- *   SAY ${name}          変数展開
- *   ADD a b -> name      a+b を name に
- *   SUB / MUL / DIV
- *   IF <name> IS <val>   次の1行だけ条件実行
- *   REPEAT n             次の1行を n 回
- *   LIST                 変数一覧
- *   HELP                 ヘルプ
- *   TIME                 現在時刻
- *   ECHO ENV             簡易環境情報
  */
 
 function tokenizeExpr(s) {
@@ -76,14 +62,21 @@ function runPilotScript(source, initialVars = {}) {
       const keys = Object.keys(vars)
       out.push({
         type: 'out',
-        text: keys.length ? keys.map((k) => `${k} = ${JSON.stringify(vars[k])}`).join('\n') : '(no vars)',
+        text: keys.length ? keys.map((k) => k + ' = ' + JSON.stringify(vars[k])).join('\n') : '(no vars)',
       })
       return
     }
     if (upper === 'ECHO ENV') {
       out.push({
         type: 'out',
-        text: `lang=${navigator.language}\nonline=${navigator.onLine}\nua=${navigator.userAgent.slice(0, 60)}…`,
+        text:
+          'lang=' +
+          navigator.language +
+          '\nonline=' +
+          navigator.onLine +
+          '\nua=' +
+          navigator.userAgent.slice(0, 60) +
+          '…',
       })
       return
     }
@@ -103,7 +96,7 @@ function runPilotScript(source, initialVars = {}) {
       const name = rest.slice(0, eq).trim()
       const val = tokenizeExpr(expand(rest.slice(eq + 1).trim(), vars))
       vars[name] = val
-      out.push({ type: 'sys', text: `${name} := ${JSON.stringify(val)}` })
+      out.push({ type: 'sys', text: name + ' := ' + JSON.stringify(val) })
       return
     }
 
@@ -132,12 +125,11 @@ function runPilotScript(source, initialVars = {}) {
       else if (op === 'DIV') r = b === 0 ? NaN : a / b
       const dest = math[3]
       vars[dest] = r
-      out.push({ type: 'sys', text: `${dest} := ${r}` })
+      out.push({ type: 'sys', text: dest + ' := ' + r })
       return
     }
 
     if (upper.startsWith('IF ')) {
-      // IF name IS value
       const m = line.match(/^IF\s+(\S+)\s+IS\s+(.+)$/i)
       if (!m) {
         out.push({ type: 'err', text: 'IF name IS value' })
@@ -159,7 +151,7 @@ function runPilotScript(source, initialVars = {}) {
       return
     }
 
-    out.push({ type: 'err', text: `Unknown: ${line}` })
+    out.push({ type: 'err', text: 'Unknown: ' + line })
   }
 
   while (i < lines.length) {
@@ -181,16 +173,19 @@ function runPilotScript(source, initialVars = {}) {
   return { out, vars }
 }
 
-const SAMPLE = `# PilotScript sample
-LET name = "Pilot"
-SAY Hello, ${name}!
-LET a = 21
-LET b = 2
-MUL a b -> answer
-SAY 21 x 2 = ${answer}
-TIME
-HELP
-`
+// バッククォート内の ${} は JS が評価してしまうので、サンプルは通常文字列で定義する
+const SAMPLE = [
+  '# PilotScript sample',
+  'LET name = "Pilot"',
+  'SAY Hello, ${name}!',
+  'LET a = 21',
+  'LET b = 2',
+  'MUL a b -> answer',
+  'SAY 21 x 2 = ${answer}',
+  'TIME',
+  'HELP',
+  '',
+].join('\n')
 
 export default function TerminalApp() {
   const [code, setCode] = useState(SAMPLE)
@@ -223,7 +218,10 @@ export default function TerminalApp() {
         <div className="ml-auto flex gap-2">
           <button
             type="button"
-            onClick={() => { setLogs([]); setVars({}) }}
+            onClick={() => {
+              setLogs([])
+              setVars({})
+            }}
             className="px-2 py-1 rounded text-xs bg-white/10 hover:bg-white/15"
           >
             Clear out
@@ -254,15 +252,17 @@ export default function TerminalApp() {
         {logs.map((line, idx) => (
           <pre
             key={idx}
-            className={`whitespace-pre-wrap break-words m-0 ${
-              line.type === 'err'
+            className={
+              'whitespace-pre-wrap break-words m-0 ' +
+              (line.type === 'err'
                 ? 'text-[#f85149]'
                 : line.type === 'sys'
                 ? 'text-[#8b949e]'
-                : 'text-[#3fb950]'
-            }`}
+                : 'text-[#3fb950]')
+            }
           >
-            {line.type === 'err' ? '✗ ' : line.type === 'sys' ? '· ' : '→ '}{line.text}
+            {line.type === 'err' ? '✗ ' : line.type === 'sys' ? '· ' : '→ '}
+            {line.text}
           </pre>
         ))}
       </div>
