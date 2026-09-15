@@ -1,5 +1,5 @@
 /**
- * ベースアプリケーション定義（title/icon の単一ソース）
+ * ベースアプリケーション（常にインストール済み）
  */
 export const BASE_APPS = [
   {
@@ -47,6 +47,18 @@ export const BASE_APPS = [
     title: 'PilotTerm',
     icon: '⬛',
     internal: 'terminal',
+  },
+]
+
+/** ストアで入手可能な試験的拡張（インストール後にデスクトップへ） */
+export const STORE_CATALOG = [
+  {
+    id: 'taskmanager',
+    title: 'タスクマネージャー',
+    icon: '📊',
+    internal: 'taskmanager',
+    description: '実行中アプリの一覧・終了・最小化を行う試験的ツール',
+    experimental: true,
   },
 ]
 
