@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import Taskbar from './Taskbar'
 import Window from './Window'
+import ContextMenu from './ContextMenu'
 
 export default function Desktop({
   apps,
@@ -12,16 +13,58 @@ export default function Desktop({
   minimizeApp,
   toggleMaximize,
   toggleFullscreen,
+  wallpaper,
+  settingsProps,
 }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [ctxMenu, setCtxMenu] = useState(null) // { x, y, items }
 
   const handleIconDoubleClick = (id) => {
-    if (openApps[id]?.isOpen) {
-      focusApp(id)
-    } else {
-      openApp(id)
-    }
+    if (openApps[id]?.isOpen) focusApp(id)
+    else openApp(id)
+  }
+
+  const closeCtx = useCallback(() => setCtxMenu(null), [])
+
+  const handleDesktopContext = (e) => {
+    e.preventDefault()
+    setCtxMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: '表示を更新', icon: '🔄', onClick: () => window.location.reload() },
+        { separator: true },
+        { label: '設定を開く', icon: '⚙️', onClick: () => openApp('settings') },
+        { label: '検索', icon: '🔍', onClick: () => setSearchOpen(true) },
+      ],
+    })
+  }
+
+  const handleIconContext = (e, app) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const isOpen = openApps[app.id]?.isOpen
+    setCtxMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: '開く', icon: '▶️', onClick: () => openApp(app.id) },
+        { separator: true },
+        {
+          label: isOpen ? '閉じる' : '閉じる',
+          icon: '✕',
+          disabled: !isOpen,
+          onClick: () => closeApp(app.id),
+        },
+        {
+          label: '最小化',
+          icon: '─',
+          disabled: !isOpen || openApps[app.id]?.isMinimized,
+          onClick: () => minimizeApp(app.id),
+        },
+      ],
+    })
   }
 
   const filteredApps = apps.filter(
@@ -31,15 +74,12 @@ export default function Desktop({
   )
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-[#0c1a2e]">
-      {/* Windows 11風壁紙グラデーション */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(ellipse at 30% 20%, #1a3a5c 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, #0d2840 0%, transparent 45%), linear-gradient(160deg, #0a1628 0%, #0c1a2e 40%, #081420 100%)',
-        }}
-      />
+    <div
+      className="relative w-full h-screen overflow-hidden"
+      onContextMenu={handleDesktopContext}
+    >
+      {/* 壁紙 */}
+      <div className="absolute inset-0" style={{ background: wallpaper }} />
 
       {/* デスクトップアイコン */}
       <div className="absolute top-4 left-4 flex flex-col gap-1 z-10">
@@ -47,6 +87,7 @@ export default function Desktop({
           <button
             key={app.id}
             onDoubleClick={() => handleIconDoubleClick(app.id)}
+            onContextMenu={(e) => handleIconContext(e, app)}
             className="flex flex-col items-center gap-1 w-[76px] p-2 rounded hover:bg-white/10 transition-colors group"
           >
             <div className="w-12 h-12 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center text-3xl shadow group-hover:scale-105 transition-transform">
@@ -59,7 +100,7 @@ export default function Desktop({
         ))}
       </div>
 
-      {/* 開いているウィンドウ */}
+      {/* ウィンドウ */}
       {apps.map((app) => {
         const state = openApps[app.id]
         if (!state?.isOpen) return null
@@ -74,19 +115,17 @@ export default function Desktop({
             onMinimize={() => minimizeApp(app.id)}
             onToggleMaximize={() => toggleMaximize(app.id)}
             onToggleFullscreen={() => toggleFullscreen(app.id)}
+            settingsProps={settingsProps}
           />
         )
       })}
 
-      {/* 検索 / スタート風パネル */}
+      {/* 検索パネル */}
       {searchOpen && (
         <>
           <div
             className="absolute inset-0 z-[9990]"
-            onClick={() => {
-              setSearchOpen(false)
-              setSearchQuery('')
-            }}
+            onClick={() => { setSearchOpen(false); setSearchQuery('') }}
           />
           <div className="absolute bottom-14 left-1/2 -translate-x-1/2 w-[520px] max-w-[90vw] bg-[#1e1e1e]/95 backdrop-blur-2xl rounded-xl shadow-2xl border border-white/10 z-[9991] overflow-hidden">
             <div className="p-4">
@@ -126,21 +165,20 @@ export default function Desktop({
         </>
       )}
 
-      {/* タスクバー */}
+      {/* 右クリックメニュー */}
+      {ctxMenu && (
+        <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={closeCtx} />
+      )}
+
       <Taskbar
         apps={apps}
         openApps={openApps}
         onAppClick={(id) => {
           const s = openApps[id]
           if (s?.isOpen) {
-            if (s.isMinimized || !s.isFocused) {
-              focusApp(id)
-            } else {
-              minimizeApp(id)
-            }
-          } else {
-            openApp(id)
-          }
+            if (s.isMinimized || !s.isFocused) focusApp(id)
+            else minimizeApp(id)
+          } else openApp(id)
         }}
         onSearchClick={() => setSearchOpen((v) => !v)}
         searchOpen={searchOpen}
