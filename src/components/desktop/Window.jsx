@@ -1,5 +1,22 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import SettingsApp from './SettingsApp'
+import StoreApp from './StoreApp'
+
+function AppContent({ app, settingsProps }) {
+  if (app.internal === 'settings') return <SettingsApp {...settingsProps} />
+  if (app.internal === 'store') return <StoreApp />
+  if (app.internal) return <SettingsApp {...settingsProps} />
+  const src = app.external ? app.src : `${import.meta.env.BASE_URL}${app.src}`
+  return (
+    <iframe
+      src={src}
+      title={app.title}
+      className="absolute inset-0 w-full h-full border-0 bg-white"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
+      allow="fullscreen"
+    />
+  )
+}
 
 export default function Window({
   app,
@@ -13,7 +30,7 @@ export default function Window({
   settingsProps,
 }) {
   const [isDragging, setIsDragging] = useState(false)
-  const [resizeDir, setResizeDir] = useState(null) // 'se' | 'sw' | 'ne' | 'nw' | 'e' | 'w' | 'n' | 's'
+  const [resizeDir, setResizeDir] = useState(null)
   const dragOffset = useRef({ x: 0, y: 0 })
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0, left: 0, top: 0 })
 
@@ -24,10 +41,7 @@ export default function Window({
     if (isMaxOrFull) return
     onFocus()
     setIsDragging(true)
-    dragOffset.current = {
-      x: e.clientX - state.x,
-      y: e.clientY - state.y,
-    }
+    dragOffset.current = { x: e.clientX - state.x, y: e.clientY - state.y }
   }
 
   const handleDoubleClickTitle = (e) => {
@@ -61,7 +75,6 @@ export default function Window({
         return
       }
       if (!resizeDir) return
-
       const dx = e.clientX - resizeStart.current.x
       const dy = e.clientY - resizeStart.current.y
       const { w, h, left, top } = resizeStart.current
@@ -69,7 +82,6 @@ export default function Window({
       let newH = h
       let newX = left
       let newY = top
-
       if (resizeDir.includes('e')) newW = Math.max(320, w + dx)
       if (resizeDir.includes('s')) newH = Math.max(200, h + dy)
       if (resizeDir.includes('w')) {
@@ -80,7 +92,6 @@ export default function Window({
         newH = Math.max(200, h - dy)
         newY = top + (h - newH)
       }
-
       onUpdate({ x: newX, y: newY, width: newW, height: newH })
     },
     [isDragging, resizeDir, onUpdate]
@@ -104,14 +115,16 @@ export default function Window({
 
   if (state.isMinimized) return null
 
-  const titleBg = state.isFocused ? 'bg-[#0078d4]' : 'bg-[#2b2b2b]'
+  const titleBg = state.isFocused
+    ? 'bg-[var(--title-active)]'
+    : 'bg-[var(--title-inactive)]'
 
   const handleSize = 6
 
   return (
     <div
       className={`absolute flex flex-col overflow-hidden shadow-2xl ${
-        isMaxOrFull ? '' : 'rounded-t-lg border border-black/30'
+        isMaxOrFull ? '' : 'rounded-t-lg border border-black/20'
       }`}
       style={{
         left: state.x,
@@ -122,7 +135,6 @@ export default function Window({
       }}
       onMouseDown={onFocus}
     >
-      {/* タイトルバー */}
       <div
         className={`h-8 flex items-center select-none ${titleBg} ${isMaxOrFull ? '' : 'cursor-move'}`}
         onMouseDown={handleMouseDownTitle}
@@ -167,35 +179,20 @@ export default function Window({
         </div>
       </div>
 
-      {/* コンテンツ */}
-      <div className="flex-1 relative overflow-hidden">
-        {app.internal ? (
-          <SettingsApp {...settingsProps} />
-        ) : (
-          <iframe
-            src={app.external ? app.src : `${import.meta.env.BASE_URL}${app.src}`}
-            title={app.title}
-            className="absolute inset-0 w-full h-full border-0 bg-white"
-            sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
-            allow="fullscreen"
-          />
-        )}
+      <div className="flex-1 relative overflow-hidden bg-[var(--surface-bg)]">
+        <AppContent app={app} settingsProps={settingsProps} />
       </div>
 
-      {/* リサイズハンドル（8方向） */}
       {!isMaxOrFull && (
         <>
-          {/* 四隅 */}
           <div className="absolute top-0 left-0 cursor-nw-resize z-10" style={{ width: handleSize, height: handleSize }} onMouseDown={startResize('nw')} />
           <div className="absolute top-0 right-0 cursor-ne-resize z-10" style={{ width: handleSize, height: handleSize }} onMouseDown={startResize('ne')} />
           <div className="absolute bottom-0 left-0 cursor-sw-resize z-10" style={{ width: handleSize, height: handleSize }} onMouseDown={startResize('sw')} />
           <div className="absolute bottom-0 right-0 cursor-se-resize z-10" style={{ width: handleSize, height: handleSize }} onMouseDown={startResize('se')} />
-          {/* 辺 */}
           <div className="absolute top-0 left-0 right-0 cursor-n-resize z-10" style={{ height: 4 }} onMouseDown={startResize('n')} />
           <div className="absolute bottom-0 left-0 right-0 cursor-s-resize z-10" style={{ height: 4 }} onMouseDown={startResize('s')} />
           <div className="absolute top-0 bottom-0 left-0 cursor-w-resize z-10" style={{ width: 4 }} onMouseDown={startResize('w')} />
           <div className="absolute top-0 bottom-0 right-0 cursor-e-resize z-10" style={{ width: 4 }} onMouseDown={startResize('e')} />
-          {/* 右下の視覚インジケータ */}
           <div className="absolute bottom-1 right-1 w-2.5 h-2.5 border-r-2 border-b-2 border-gray-400/60 pointer-events-none" />
         </>
       )}
