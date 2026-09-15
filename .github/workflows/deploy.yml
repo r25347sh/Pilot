@@ -29,11 +29,10 @@ jobs:
       - name: Install dependencies
         run: npm install --registry https://registry.npmjs.org/
 
-      # Vite 用のエントリが壊れていないか確認
-      - name: Ensure Vite entry
+      # Pages 用に CDN 版 index がある場合でも、ビルド前に Vite エントリへ戻す
+      - name: Restore Vite entry for build
         run: |
-          if ! grep -q 'src/main.jsx' index.html; then
-            cat > index.html <<'HTML'
+          cat > index.html <<'HTML'
           <!doctype html>
           <html lang="ja">
             <head>
@@ -47,19 +46,18 @@ jobs:
             </body>
           </html>
           HTML
-            sed -i 's/^          //' index.html
-          fi
+          sed -i 's/^          //' index.html
 
       - name: Build
         run: npm run build
 
       - name: Verify bundle size
         run: |
-          SIZE=$(wc -c < dist/assets/*.js | awk '{print $1}')
-          echo "JS size: $SIZE"
+          JSFILE=$(ls dist/assets/*.js | head -1)
+          SIZE=$(wc -c < "$JSFILE")
+          echo "JS: $JSFILE ($SIZE bytes)"
           if [ "$SIZE" -lt 50000 ]; then
-            echo "Bundle too small — React app not included"
-            ls -la dist/assets/
+            echo "Bundle too small — abort"
             exit 1
           fi
 
@@ -78,13 +76,12 @@ jobs:
           publish_dir: ./dist
           force_orphan: true
 
-      # main ブランチを Pages が配信する場合用（CDN 経由）
-      - name: Write pages-index.html artifact for main
+      # GitHub Pages が main を配信しているため、CDN 経由の本番 index を main に置く
+      - name: Publish CDN index.html to main for Pages
         run: |
           JS=$(basename $(ls dist/assets/*.js | head -1))
           CSS=$(basename $(ls dist/assets/*.css | head -1))
-          mkdir -p pages-root
-          cat > pages-root/index.html <<EOF
+          cat > index.html <<EOF
           <!doctype html>
           <html lang="ja">
             <head>
@@ -99,12 +96,9 @@ jobs:
             </body>
           </html>
           EOF
-          sed -i 's/^          //' pages-root/index.html
-          # Vite 用 index は触らない。CDN 用を public ではなく専用ファイルとして main に置く
-          cp pages-root/index.html index.pages.html
+          sed -i 's/^          //' index.html
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # main の配信向けに index.pages.html を更新（Vite の index.html は維持）
-          git add index.pages.html
-          git commit -m "chore: update index.pages.html CDN pointers [skip ci]" || true
-          git push origin HEAD:main || true
+          git add index.html
+          git commit -m "chore: production CDN index for GitHub Pages [skip ci]" || exit 0
+          git push origin HEAD:main
