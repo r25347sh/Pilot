@@ -1,10 +1,13 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import SettingsApp from './SettingsApp'
 import StoreApp from './StoreApp'
+import TerminalApp from './TerminalApp'
+import ContextMenu from './ContextMenu'
 
 function AppContent({ app, settingsProps }) {
   if (app.internal === 'settings') return <SettingsApp {...settingsProps} />
   if (app.internal === 'store') return <StoreApp />
+  if (app.internal === 'terminal') return <TerminalApp />
   if (app.internal) return <SettingsApp {...settingsProps} />
   const src = app.external ? app.src : `${import.meta.env.BASE_URL}${app.src}`
   return (
@@ -31,6 +34,7 @@ export default function Window({
 }) {
   const [isDragging, setIsDragging] = useState(false)
   const [resizeDir, setResizeDir] = useState(null)
+  const [ctx, setCtx] = useState(null)
   const dragOffset = useRef({ x: 0, y: 0 })
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0, left: 0, top: 0 })
 
@@ -47,6 +51,26 @@ export default function Window({
   const handleDoubleClickTitle = (e) => {
     if (e.target.closest('button')) return
     onToggleMaximize()
+  }
+
+  const handleTitleContext = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setCtx({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: '最小化（タスクバーに残す）', icon: '─', onClick: onMinimize },
+        {
+          label: state.isMaximized ? '元のサイズに戻す' : '最大化',
+          icon: '□',
+          onClick: onToggleMaximize,
+        },
+        { label: '全画面切替', icon: '⛶', onClick: onToggleFullscreen },
+        { separator: true },
+        { label: '閉じる（終了）', icon: '✕', onClick: onClose },
+      ],
+    })
   }
 
   const startResize = (dir) => (e) => {
@@ -113,6 +137,7 @@ export default function Window({
     }
   }, [isDragging, resizeDir, handleMouseMove, handleMouseUp])
 
+  // 最小化: ウィンドウは隠すが isOpen のまま（プロセス継続）
   if (state.isMinimized) return null
 
   const titleBg = state.isFocused
@@ -139,6 +164,7 @@ export default function Window({
         className={`h-8 flex items-center select-none ${titleBg} ${isMaxOrFull ? '' : 'cursor-move'}`}
         onMouseDown={handleMouseDownTitle}
         onDoubleClick={handleDoubleClickTitle}
+        onContextMenu={handleTitleContext}
       >
         <span className="pl-3 text-[13px] text-white font-normal truncate flex-1 flex items-center gap-2">
           <span className="text-base leading-none">{app.icon}</span>
@@ -148,7 +174,7 @@ export default function Window({
           <button
             onClick={(e) => { e.stopPropagation(); onMinimize() }}
             className="w-11 h-full flex items-center justify-center text-white/90 hover:bg-white/20 transition-colors"
-            title="最小化"
+            title="最小化（タスクバーに残す・アプリは稼働継続）"
           >
             <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor" /></svg>
           </button>
@@ -170,7 +196,7 @@ export default function Window({
           <button
             onClick={(e) => { e.stopPropagation(); onClose() }}
             className="w-11 h-full flex items-center justify-center text-white/90 hover:bg-[#e81123] transition-colors"
-            title="閉じる"
+            title="閉じる（アプリ終了）"
           >
             <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" strokeWidth="1.3">
               <line x1="0" y1="0" x2="10" y2="10" /><line x1="10" y1="0" x2="0" y2="10" />
@@ -195,6 +221,10 @@ export default function Window({
           <div className="absolute top-0 bottom-0 right-0 cursor-e-resize z-10" style={{ width: 4 }} onMouseDown={startResize('e')} />
           <div className="absolute bottom-1 right-1 w-2.5 h-2.5 border-r-2 border-b-2 border-gray-400/60 pointer-events-none" />
         </>
+      )}
+
+      {ctx && (
+        <ContextMenu x={ctx.x} y={ctx.y} items={ctx.items} onClose={() => setCtx(null)} />
       )}
     </div>
   )
