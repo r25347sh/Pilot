@@ -2,12 +2,14 @@ import { useRef, useState, useEffect, useCallback } from 'react'
 import SettingsApp from './SettingsApp'
 import StoreApp from './StoreApp'
 import TerminalApp from './TerminalApp'
+import TaskManagerApp from './TaskManagerApp'
 import ContextMenu from './ContextMenu'
 
-function AppContent({ app, settingsProps }) {
+function AppContent({ app, settingsProps, storeProps, taskManagerProps }) {
   if (app.internal === 'settings') return <SettingsApp {...settingsProps} />
-  if (app.internal === 'store') return <StoreApp />
+  if (app.internal === 'store') return <StoreApp {...storeProps} />
   if (app.internal === 'terminal') return <TerminalApp />
+  if (app.internal === 'taskmanager') return <TaskManagerApp {...taskManagerProps} />
   if (app.internal) return <SettingsApp {...settingsProps} />
   const src = app.external ? app.src : `${import.meta.env.BASE_URL}${app.src}`
   return (
@@ -31,6 +33,8 @@ export default function Window({
   onToggleMaximize,
   onToggleFullscreen,
   settingsProps,
+  storeProps,
+  taskManagerProps,
 }) {
   const [isDragging, setIsDragging] = useState(false)
   const [resizeDir, setResizeDir] = useState(null)
@@ -137,7 +141,6 @@ export default function Window({
     }
   }, [isDragging, resizeDir, handleMouseMove, handleMouseUp])
 
-  // 最小化: ウィンドウは隠すが isOpen のまま（プロセス継続）
   if (state.isMinimized) return null
 
   const titleBg = state.isFocused
@@ -206,7 +209,12 @@ export default function Window({
       </div>
 
       <div className="flex-1 relative overflow-hidden bg-[var(--surface-bg)]">
-        <AppContent app={app} settingsProps={settingsProps} />
+        <AppContent
+          app={app}
+          settingsProps={settingsProps}
+          storeProps={storeProps}
+          taskManagerProps={taskManagerProps}
+        />
       </div>
 
       {!isMaxOrFull && (
