@@ -1,7 +1,14 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import Taskbar from './Taskbar'
 import Window from './Window'
 import ContextMenu from './ContextMenu'
+
+const ICON_H = 88
+const GRID = 8
+
+function defaultPos(index) {
+  return { x: 16, y: 16 + index * (ICON_H + 4) }
+}
 
 export default function Desktop({
   apps,
@@ -14,13 +21,92 @@ export default function Desktop({
   toggleMaximize,
   toggleFullscreen,
   wallpaper,
+  resolvedTheme,
   settingsProps,
+  iconPositions,
+  updateIconPosition,
 }) {
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [ctxMenu, setCtxMenu] = useState(null) // { x, y, items }
+  const [ctxMenu, setCtxMenu] = useState(null)
+  const dragRef = useRef(null)
+
+  const getPos = (app, index) => iconPositions[app.id] || defaultPos(index)
+
+  const handleIconPointerDown = (e, app, index) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const pos = getPos(app, index)
+    dragRef.current = {
+      id: app.id,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: pos.x,
+      origY: pos.y,
+      moved: false,
+    }
+
+    const onMove = (ev) => {
+      const d = dragRef.current
+      if (!d || d.id !== app.id) return
+      const dx = ev.clientX - d.startX
+      const dy = ev.clientY - d.startY
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) d.moved = true
+      if (!d.moved) return
+      const x = Math.max(0, d.origX + dx)
+      const y = Math.max(0, Math.min(window.innerHeight - 60 - ICON_H, d.origY + dy))
+      updateIconPosition(app.id, { x, y })
+    }
+
+    const onUp = () => {
+      const d = dragRef.current
+      if (d?.moved) {
+        const snap = (v) => Math.round(v / GRID) * GRID
+        const finalX = Math.max(0, d.origX + (window.event ? 0 : 0))
+        // 最終位置は直近の update 済み。再スナップ用に current を読む代わりに計算
+        const lastX = d.origX + (d._lastDx || 0)
+        const lastY = d.origY + (d._lastDy || 0)
+        // onMove で毎回更新しているので、最後のイベント座標でスナップ
+      }
+      dragRef.current = null
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+
+    // track last delta for snap
+    const onMoveTracked = (ev) => {
+      const d = dragRef.current
+      if (!d || d.id !== app.id) return
+      const dx = ev.clientX - d.startX
+      const dy = ev.clientY - d.startY
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) d.moved = true
+      if (!d.moved) return
+      d._lastDx = dx
+      d._lastDy = dy
+      const x = Math.max(0, d.origX + dx)
+      const y = Math.max(0, Math.min(window.innerHeight - 60 - ICON_H, d.origY + dy))
+      updateIconPosition(app.id, { x, y })
+    }
+
+    const onUpSnap = () => {
+      const d = dragRef.current
+      if (d?.moved) {
+        const snap = (v) => Math.round(v / GRID) * GRID
+        const x = snap(Math.max(0, d.origX + (d._lastDx || 0)))
+        const y = snap(Math.max(0, Math.min(window.innerHeight - 60 - ICON_H, d.origY + (d._lastDy || 0))))
+        updateIconPosition(app.id, { x, y })
+      }
+      dragRef.current = null
+      window.removeEventListener('pointermove', onMoveTracked)
+      window.removeEventListener('pointerup', onUpSnap)
+    }
+
+    window.addEventListener('pointermove', onMoveTracked)
+    window.addEventListener('pointerup', onUpSnap)
+  }
 
   const handleIconDoubleClick = (id) => {
+    if (dragRef.current?.moved) return
     if (openApps[id]?.isOpen) focusApp(id)
     else openApp(id)
   }
@@ -36,6 +122,7 @@ export default function Desktop({
         { label: '表示を更新', icon: '🔄', onClick: () => window.location.reload() },
         { separator: true },
         { label: '設定を開く', icon: '⚙️', onClick: () => openApp('settings') },
+        { label: 'ストアを開く', icon: '🛒', onClick: () => openApp('store') },
         { label: '検索', icon: '🔍', onClick: () => setSearchOpen(true) },
       ],
     })
@@ -51,12 +138,7 @@ export default function Desktop({
       items: [
         { label: '開く', icon: '▶️', onClick: () => openApp(app.id) },
         { separator: true },
-        {
-          label: isOpen ? '閉じる' : '閉じる',
-          icon: '✕',
-          disabled: !isOpen,
-          onClick: () => closeApp(app.id),
-        },
+        { label: '閉じる', icon: '✕', disabled: !isOpen, onClick: () => closeApp(app.id) },
         {
           label: '最小化',
           icon: '─',
@@ -76,31 +158,32 @@ export default function Desktop({
   return (
     <div
       className="relative w-full h-screen overflow-hidden"
+      data-theme={resolvedTheme}
       onContextMenu={handleDesktopContext}
     >
-      {/* 壁紙 */}
       <div className="absolute inset-0" style={{ background: wallpaper }} />
 
-      {/* デスクトップアイコン */}
-      <div className="absolute top-4 left-4 flex flex-col gap-1 z-10">
-        {apps.map((app) => (
+      {apps.map((app, index) => {
+        const pos = getPos(app, index)
+        return (
           <button
             key={app.id}
+            onPointerDown={(e) => handleIconPointerDown(e, app, index)}
             onDoubleClick={() => handleIconDoubleClick(app.id)}
             onContextMenu={(e) => handleIconContext(e, app)}
-            className="flex flex-col items-center gap-1 w-[76px] p-2 rounded hover:bg-white/10 transition-colors group"
+            className="absolute flex flex-col items-center gap-1 w-[76px] p-2 rounded hover:bg-white/15 transition-colors group z-10 select-none touch-none"
+            style={{ left: pos.x, top: pos.y }}
           >
-            <div className="w-12 h-12 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center text-3xl shadow group-hover:scale-105 transition-transform">
+            <div className="w-12 h-12 rounded-lg bg-black/20 backdrop-blur-sm flex items-center justify-center text-3xl shadow group-hover:scale-105 transition-transform pointer-events-none">
               {app.icon}
             </div>
-            <span className="text-white text-[11px] font-medium drop-shadow-md text-center leading-tight px-0.5">
+            <span className="text-white text-[11px] font-medium drop-shadow-md text-center leading-tight px-0.5 pointer-events-none">
               {app.title}
             </span>
           </button>
-        ))}
-      </div>
+        )
+      })}
 
-      {/* ウィンドウ */}
       {apps.map((app) => {
         const state = openApps[app.id]
         if (!state?.isOpen) return null
@@ -120,14 +203,10 @@ export default function Desktop({
         )
       })}
 
-      {/* 検索パネル */}
       {searchOpen && (
         <>
-          <div
-            className="absolute inset-0 z-[9990]"
-            onClick={() => { setSearchOpen(false); setSearchQuery('') }}
-          />
-          <div className="absolute bottom-14 left-1/2 -translate-x-1/2 w-[520px] max-w-[90vw] bg-[#1e1e1e]/95 backdrop-blur-2xl rounded-xl shadow-2xl border border-white/10 z-[9991] overflow-hidden">
+          <div className="absolute inset-0 z-[9990]" onClick={() => { setSearchOpen(false); setSearchQuery('') }} />
+          <div className="absolute bottom-14 left-1/2 -translate-x-1/2 w-[520px] max-w-[90vw] bg-[var(--panel-bg)] backdrop-blur-2xl rounded-xl shadow-2xl border border-[var(--panel-border)] z-[9991] overflow-hidden">
             <div className="p-4">
               <input
                 autoFocus
@@ -135,27 +214,23 @@ export default function Desktop({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="アプリを検索..."
-                className="w-full px-4 py-2.5 rounded-lg bg-white/10 border border-white/10 text-white placeholder-white/40 text-sm outline-none focus:border-[#0078d4]"
+                className="w-full px-4 py-2.5 rounded-lg bg-[var(--input-bg)] border border-[var(--panel-border)] text-[var(--surface-text)] text-sm outline-none focus:border-[#0078d4]"
               />
             </div>
             <div className="px-3 pb-3 max-h-64 overflow-y-auto">
               {filteredApps.length === 0 ? (
-                <p className="text-white/40 text-sm text-center py-6">見つかりませんでした</p>
+                <p className="text-[var(--surface-text)] opacity-40 text-sm text-center py-6">見つかりませんでした</p>
               ) : (
                 filteredApps.map((app) => (
                   <button
                     key={app.id}
-                    onClick={() => {
-                      openApp(app.id)
-                      setSearchOpen(false)
-                      setSearchQuery('')
-                    }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10 transition-colors text-left"
+                    onClick={() => { openApp(app.id); setSearchOpen(false); setSearchQuery('') }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--hover-bg)] transition-colors text-left"
                   >
                     <span className="text-2xl">{app.icon}</span>
                     <div>
-                      <div className="text-white text-sm font-medium">{app.title}</div>
-                      <div className="text-white/40 text-xs">アプリケーション</div>
+                      <div className="text-[var(--surface-text)] text-sm font-medium">{app.title}</div>
+                      <div className="text-[var(--surface-text)] opacity-40 text-xs">アプリケーション</div>
                     </div>
                   </button>
                 ))
@@ -165,10 +240,7 @@ export default function Desktop({
         </>
       )}
 
-      {/* 右クリックメニュー */}
-      {ctxMenu && (
-        <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={closeCtx} />
-      )}
+      {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={closeCtx} />}
 
       <Taskbar
         apps={apps}
