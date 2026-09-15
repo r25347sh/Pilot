@@ -2,20 +2,29 @@ import { useState, useEffect, useCallback } from 'react'
 import Desktop from './components/desktop/Desktop'
 import HomeScreen from './components/mobile/HomeScreen'
 
+// 疑似アプリケーション（外部GitHub Pagesサイトをiframeで読み込み）
 const APPS = [
-  { id: 'profile', title: 'Profile', icon: '👤', src: 'app-profile.html' },
-  { id: 'works', title: 'Works', icon: '💼', src: 'app-works.html' },
-  { id: 'contact', title: 'Contact', icon: '✉️', src: 'app-contact.html' },
+  {
+    id: 'reitansai',
+    title: '麗澤祭',
+    icon: '🎪',
+    src: 'https://r25347sh.github.io/reitansai/',
+    external: true,
+  },
+  {
+    id: 'asobiseminar',
+    title: 'Asobi Lab.',
+    icon: '🎨',
+    src: 'https://r25347sh.github.io/asobiseminar/',
+    external: true,
+  },
 ]
 
 export default function App() {
   const [isMobile, setIsMobile] = useState(false)
-  // グローバル状態: 開いているアプリとフォーカス
   const [openApps, setOpenApps] = useState({})
-  // { id: { isOpen: true, isFocused: true, zIndex: 10, ... } }
   const [maxZ, setMaxZ] = useState(10)
 
-  // 画面幅でDesktop / Mobile を完全出し分け
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
     check()
@@ -28,19 +37,32 @@ export default function App() {
       const nextZ = prevMax + 1
       setOpenApps((prev) => {
         const updated = { ...prev }
-        // 他をunfocus
         Object.keys(updated).forEach((k) => {
           updated[k] = { ...updated[k], isFocused: false }
         })
-        // 新規 or 既存を開く
-        updated[id] = {
-          isOpen: true,
-          isFocused: true,
-          zIndex: nextZ,
-          x: prev[id]?.x ?? (80 + Object.keys(prev).length * 30),
-          y: prev[id]?.y ?? (60 + Object.keys(prev).length * 30),
-          width: prev[id]?.width ?? 520,
-          height: prev[id]?.height ?? 380,
+        const existing = prev[id]
+        if (existing?.isOpen) {
+          // 既に開いている → フォーカス＋最小化解除
+          updated[id] = {
+            ...existing,
+            isFocused: true,
+            isMinimized: false,
+            zIndex: nextZ,
+          }
+        } else {
+          updated[id] = {
+            isOpen: true,
+            isFocused: true,
+            isMinimized: false,
+            isMaximized: false,
+            isFullscreen: false,
+            zIndex: nextZ,
+            x: 100 + Object.keys(prev).length * 28,
+            y: 50 + Object.keys(prev).length * 28,
+            width: 900,
+            height: 560,
+            prevRect: null, // maximize/fullscreen からの復元用
+          }
         }
         return updated
       })
@@ -58,6 +80,8 @@ export default function App() {
             ...updated[k],
             isFocused: k === id,
             zIndex: k === id ? nextZ : updated[k].zIndex,
+            // タスクバーからクリック時は最小化解除
+            isMinimized: k === id ? false : updated[k].isMinimized,
           }
         })
         return updated
@@ -81,6 +105,86 @@ export default function App() {
     }))
   }, [])
 
+  // 最小化
+  const minimizeApp = useCallback((id) => {
+    setOpenApps((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], isMinimized: true, isFocused: false },
+    }))
+  }, [])
+
+  // 最大化 / 復元
+  const toggleMaximize = useCallback((id) => {
+    setOpenApps((prev) => {
+      const cur = prev[id]
+      if (!cur) return prev
+      if (cur.isMaximized || cur.isFullscreen) {
+        // 復元
+        const rect = cur.prevRect || { x: 100, y: 50, width: 900, height: 560 }
+        return {
+          ...prev,
+          [id]: {
+            ...cur,
+            isMaximized: false,
+            isFullscreen: false,
+            ...rect,
+            prevRect: null,
+          },
+        }
+      }
+      // 最大化
+      return {
+        ...prev,
+        [id]: {
+          ...cur,
+          isMaximized: true,
+          isFullscreen: false,
+          prevRect: { x: cur.x, y: cur.y, width: cur.width, height: cur.height },
+          x: 0,
+          y: 0,
+          width: window.innerWidth,
+          height: window.innerHeight - 48, // タスクバー分
+        },
+      }
+    })
+  }, [])
+
+  // 全画面
+  const toggleFullscreen = useCallback((id) => {
+    setOpenApps((prev) => {
+      const cur = prev[id]
+      if (!cur) return prev
+      if (cur.isFullscreen) {
+        const rect = cur.prevRect || { x: 100, y: 50, width: 900, height: 560 }
+        return {
+          ...prev,
+          [id]: {
+            ...cur,
+            isFullscreen: false,
+            isMaximized: false,
+            ...rect,
+            prevRect: null,
+          },
+        }
+      }
+      return {
+        ...prev,
+        [id]: {
+          ...cur,
+          isFullscreen: true,
+          isMaximized: false,
+          prevRect: cur.isMaximized
+            ? cur.prevRect
+            : { x: cur.x, y: cur.y, width: cur.width, height: cur.height },
+          x: 0,
+          y: 0,
+          width: window.innerWidth,
+          height: window.innerHeight,
+        },
+      }
+    })
+  }, [])
+
   const commonProps = {
     apps: APPS,
     openApps,
@@ -88,6 +192,9 @@ export default function App() {
     focusApp,
     closeApp,
     updateWindow,
+    minimizeApp,
+    toggleMaximize,
+    toggleFullscreen,
   }
 
   if (isMobile) {
