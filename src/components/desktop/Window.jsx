@@ -1,15 +1,25 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 
-export default function Window({ app, state, onFocus, onClose, onUpdate }) {
-  const windowRef = useRef(null)
+export default function Window({
+  app,
+  state,
+  onFocus,
+  onClose,
+  onUpdate,
+  onMinimize,
+  onToggleMaximize,
+  onToggleFullscreen,
+}) {
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const dragOffset = useRef({ x: 0, y: 0 })
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 })
 
-  // ドラッグ開始
+  const isMaxOrFull = state.isMaximized || state.isFullscreen
+
   const handleMouseDownTitle = (e) => {
     if (e.target.closest('button')) return
+    if (isMaxOrFull) return // 最大化中はドラッグ不可
     onFocus()
     setIsDragging(true)
     dragOffset.current = {
@@ -18,9 +28,14 @@ export default function Window({ app, state, onFocus, onClose, onUpdate }) {
     }
   }
 
-  // リサイズ開始
+  const handleDoubleClickTitle = (e) => {
+    if (e.target.closest('button')) return
+    onToggleMaximize()
+  }
+
   const handleMouseDownResize = (e) => {
     e.stopPropagation()
+    if (isMaxOrFull) return
     onFocus()
     setIsResizing(true)
     resizeStart.current = {
@@ -31,22 +46,25 @@ export default function Window({ app, state, onFocus, onClose, onUpdate }) {
     }
   }
 
-  const handleMouseMove = useCallback((e) => {
-    if (isDragging) {
-      onUpdate({
-        x: Math.max(0, e.clientX - dragOffset.current.x),
-        y: Math.max(0, e.clientY - dragOffset.current.y),
-      })
-    }
-    if (isResizing) {
-      const dw = e.clientX - resizeStart.current.x
-      const dh = e.clientY - resizeStart.current.y
-      onUpdate({
-        width: Math.max(320, resizeStart.current.w + dw),
-        height: Math.max(200, resizeStart.current.h + dh),
-      })
-    }
-  }, [isDragging, isResizing, onUpdate])
+  const handleMouseMove = useCallback(
+    (e) => {
+      if (isDragging) {
+        onUpdate({
+          x: Math.max(0, e.clientX - dragOffset.current.x),
+          y: Math.max(0, e.clientY - dragOffset.current.y),
+        })
+      }
+      if (isResizing) {
+        const dw = e.clientX - resizeStart.current.x
+        const dh = e.clientY - resizeStart.current.y
+        onUpdate({
+          width: Math.max(400, resizeStart.current.w + dw),
+          height: Math.max(280, resizeStart.current.h + dh),
+        })
+      }
+    },
+    [isDragging, isResizing, onUpdate]
+  )
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false)
@@ -64,13 +82,23 @@ export default function Window({ app, state, onFocus, onClose, onUpdate }) {
     }
   }, [isDragging, isResizing, handleMouseMove, handleMouseUp])
 
-  // iframeのsrcはbase pathを考慮
-  const iframeSrc = `${import.meta.env.BASE_URL}${app.src}`
+  // 最小化中は描画しない（タスクバーのみ）
+  if (state.isMinimized) return null
+
+  const iframeSrc = app.external ? app.src : `${import.meta.env.BASE_URL}${app.src}`
+
+  // Windows風タイトルバー色（フォーカス時）
+  const titleBg = state.isFocused
+    ? 'bg-[#0078d4]'
+    : 'bg-[#2b2b2b]'
 
   return (
     <div
-      ref={windowRef}
-      className="absolute flex flex-col bg-slate-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-white/10 overflow-hidden"
+      className={`absolute flex flex-col overflow-hidden shadow-2xl ${
+        isMaxOrFull ? '' : 'rounded-t-lg border border-black/30'
+      } ${
+        state.isFullscreen ? 'rounded-none' : ''
+      }`}
       style={{
         left: state.x,
         top: state.y,
@@ -80,24 +108,64 @@ export default function Window({ app, state, onFocus, onClose, onUpdate }) {
       }}
       onMouseDown={onFocus}
     >
-      {/* タイトルバー */}
+      {/* Windows風タイトルバー */}
       <div
-        className="h-10 flex items-center px-3 gap-2 bg-slate-800/80 cursor-move select-none border-b border-white/10"
+        className={`h-8 flex items-center select-none ${titleBg} ${isMaxOrFull ? '' : 'cursor-move'}`}
         onMouseDown={handleMouseDownTitle}
+        onDoubleClick={handleDoubleClickTitle}
       >
-        <div className="flex gap-1.5">
-          <button
-            onClick={(e) => { e.stopPropagation(); onClose() }}
-            className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-400 transition-colors"
-            title="閉じる"
-          />
-          <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-          <div className="w-3 h-3 rounded-full bg-green-500/80" />
-        </div>
-        <span className="flex-1 text-center text-sm text-white/90 font-medium truncate">
-          {app.icon} {app.title}
+        <span className="pl-3 text-[13px] text-white font-normal truncate flex-1 flex items-center gap-2">
+          <span className="text-base leading-none">{app.icon}</span>
+          {app.title}
         </span>
-        <div className="w-12" /> {/* バランス用 */}
+
+        {/* ウィンドウ操作ボタン（Windows順: 最小化 → 最大化 → 閉じる） */}
+        <div className="flex h-full">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onMinimize()
+            }}
+            className="w-11 h-full flex items-center justify-center text-white/90 hover:bg-white/20 transition-colors"
+            title="最小化"
+          >
+            <svg width="10" height="1" viewBox="0 0 10 1">
+              <rect width="10" height="1" fill="currentColor" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleMaximize()
+            }}
+            className="w-11 h-full flex items-center justify-center text-white/90 hover:bg-white/20 transition-colors"
+            title={state.isMaximized || state.isFullscreen ? '元のサイズに戻す' : '最大化'}
+          >
+            {state.isMaximized || state.isFullscreen ? (
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2">
+                <rect x="2" y="0" width="8" height="8" />
+                <rect x="0" y="2" width="8" height="8" />
+              </svg>
+            ) : (
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2">
+                <rect x="0.5" y="0.5" width="9" height="9" />
+              </svg>
+            )}
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onClose()
+            }}
+            className="w-11 h-full flex items-center justify-center text-white/90 hover:bg-[#e81123] transition-colors"
+            title="閉じる"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" strokeWidth="1.3">
+              <line x1="0" y1="0" x2="10" y2="10" />
+              <line x1="10" y1="0" x2="0" y2="10" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* コンテンツ iframe */}
@@ -106,17 +174,20 @@ export default function Window({ app, state, onFocus, onClose, onUpdate }) {
           src={iframeSrc}
           title={app.title}
           className="absolute inset-0 w-full h-full border-0"
-          sandbox="allow-scripts allow-same-origin"
+          sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
+          allow="fullscreen"
         />
       </div>
 
-      {/* リサイズハンドル */}
-      <div
-        className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize"
-        onMouseDown={handleMouseDownResize}
-      >
-        <div className="absolute bottom-1 right-1 w-2 h-2 border-r-2 border-b-2 border-white/40" />
-      </div>
+      {/* リサイズハンドル（最大化・全画面時は非表示） */}
+      {!isMaxOrFull && (
+        <div
+          className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-10"
+          onMouseDown={handleMouseDownResize}
+        >
+          <div className="absolute bottom-1 right-1 w-2.5 h-2.5 border-r-2 border-b-2 border-gray-400/70" />
+        </div>
+      )}
     </div>
   )
 }
