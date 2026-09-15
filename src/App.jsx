@@ -2,80 +2,94 @@ import { useState, useEffect, useCallback } from 'react'
 import Desktop from './components/desktop/Desktop'
 import HomeScreen from './components/mobile/HomeScreen'
 import { WALLPAPERS } from './components/desktop/SettingsApp'
-
-const APPS = [
-  {
-    id: 'reitansai',
-    title: '麗探祭',
-    icon: '🎪',
-    src: 'https://r25347sh.github.io/reitansai/',
-    external: true,
-  },
-  {
-    id: 'asobiseminar',
-    title: 'Asobi Lab.',
-    icon: '🎨',
-    src: 'https://r25347sh.github.io/asobiseminar/',
-    external: true,
-  },
-  {
-    id: 'settings',
-    title: '設定',
-    icon: '⚙️',
-    internal: true, // Reactコンポーネントで描画
-  },
-]
+import { mergeApps } from './apps/registry'
+import {
+  getSettings,
+  setSettings,
+  getIconPositions,
+  setIconPositions,
+  getInstalledApps,
+} from './lib/storage'
 
 const DEFAULT_WALLPAPER = WALLPAPERS[0].value
 
 function getSystemTheme() {
+  if (typeof window === 'undefined') return 'dark'
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function loadSettings() {
-  try {
-    const raw = localStorage.getItem('pilot-settings')
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return { theme: 'dark', wallpaper: DEFAULT_WALLPAPER }
-}
-
 export default function App() {
+  const [ready, setReady] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [openApps, setOpenApps] = useState({})
   const [maxZ, setMaxZ] = useState(10)
 
-  const saved = loadSettings()
-  const [themePref, setThemePref] = useState(saved.theme || 'dark')
-  const [wallpaper, setWallpaper] = useState(saved.wallpaper || DEFAULT_WALLPAPER)
-  const [resolvedTheme, setResolvedTheme] = useState(
-    saved.theme === 'system' ? getSystemTheme() : saved.theme || 'dark'
-  )
+  const [apps, setApps] = useState(() => mergeApps([]))
+  const [iconPositions, setIconPositionsState] = useState({})
 
-  // テーマ解決 & 永続化
-  useEffect(() => {
-    const resolved = themePref === 'system' ? getSystemTheme() : themePref
-    setResolvedTheme(resolved)
-    document.documentElement.setAttribute('data-theme', resolved)
-    localStorage.setItem(
-      'pilot-settings',
-      JSON.stringify({ theme: themePref, wallpaper })
-    )
-  }, [themePref, wallpaper])
+  const [themePref, setThemePref] = useState('system')
+  const [wallpaper, setWallpaper] = useState(DEFAULT_WALLPAPER)
+  const [resolvedTheme, setResolvedTheme] = useState(getSystemTheme)
 
+  // localforage から初期ロード
   useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const [settings, positions, installed] = await Promise.all([
+        getSettings(),
+        getIconPositions(),
+        getInstalledApps(),
+      ])
+      if (cancelled) return
+
+      if (settings) {
+        if (settings.theme) setThemePref(settings.theme)
+        if (settings.wallpaper) setWallpaper(settings.wallpaper)
+      }
+      if (positions && typeof positions === 'object') {
+        setIconPositionsState(positions)
+      }
+      setApps(mergeApps(installed || []))
+      setReady(true)
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  // テーマ解決: system は prefers-color-scheme を本当に使う
+  useEffect(() => {
+    const apply = () => {
+      const resolved = themePref === 'system' ? getSystemTheme() : themePref
+      setResolvedTheme(resolved)
+      document.documentElement.setAttribute('data-theme', resolved)
+    }
+    apply()
+
     if (themePref !== 'system') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = () => setResolvedTheme(mq.matches ? 'dark' : 'light')
+    const handler = () => apply()
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
   }, [themePref])
+
+  // 設定を localforage に保存
+  useEffect(() => {
+    if (!ready) return
+    setSettings({ theme: themePref, wallpaper })
+  }, [themePref, wallpaper, ready])
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
+  }, [])
+
+  const updateIconPosition = useCallback((id, pos) => {
+    setIconPositionsState((prev) => {
+      const next = { ...prev, [id]: pos }
+      setIconPositions(next)
+      return next
+    })
   }, [])
 
   const openApp = useCallback((id) => {
@@ -95,7 +109,7 @@ export default function App() {
             zIndex: nextZ,
           }
         } else {
-          const isSettings = id === 'settings'
+          const isCompact = id === 'settings' || id === 'store'
           updated[id] = {
             isOpen: true,
             isFocused: true,
@@ -105,8 +119,8 @@ export default function App() {
             zIndex: nextZ,
             x: 100 + Object.keys(prev).length * 28,
             y: 50 + Object.keys(prev).length * 28,
-            width: isSettings ? 640 : 900,
-            height: isSettings ? 480 : 560,
+            width: isCompact ? 640 : 900,
+            height: isCompact ? 480 : 560,
             prevRect: null,
           }
         }
@@ -165,13 +179,7 @@ export default function App() {
         const rect = cur.prevRect || { x: 100, y: 50, width: 900, height: 560 }
         return {
           ...prev,
-          [id]: {
-            ...cur,
-            isMaximized: false,
-            isFullscreen: false,
-            ...rect,
-            prevRect: null,
-          },
+          [id]: { ...cur, isMaximized: false, isFullscreen: false, ...rect, prevRect: null },
         }
       }
       return {
@@ -198,13 +206,7 @@ export default function App() {
         const rect = cur.prevRect || { x: 100, y: 50, width: 900, height: 560 }
         return {
           ...prev,
-          [id]: {
-            ...cur,
-            isFullscreen: false,
-            isMaximized: false,
-            ...rect,
-            prevRect: null,
-          },
+          [id]: { ...cur, isFullscreen: false, isMaximized: false, ...rect, prevRect: null },
         }
       }
       return {
@@ -233,7 +235,7 @@ export default function App() {
   }
 
   const commonProps = {
-    apps: APPS,
+    apps,
     openApps,
     openApp,
     focusApp,
@@ -245,6 +247,16 @@ export default function App() {
     wallpaper,
     resolvedTheme,
     settingsProps,
+    iconPositions,
+    updateIconPosition,
+  }
+
+  if (!ready) {
+    return (
+      <div className="w-full h-screen flex items-center justify-center bg-[#0c1a2e] text-white/60 text-sm">
+        Loading...
+      </div>
+    )
   }
 
   if (isMobile) {
