@@ -1,23 +1,9 @@
 /**
  * PilotScript v2 — 独自言語インタプリタ
  *
- * 設計方針:
- * - 命令型・字句解析 → 再帰下降パーサ → AST 評価
- * - 値: null | boolean | number | string | array | function
- * - ブロックスコープ、関数スコープ（クロージャ可）
- * - エラーは行番号付き RuntimeError
- *
- * 文法概要:
- *   program     := stmt*
- *   stmt        := let | assign | if | while | for | fn | return | print | exprStmt | block | builtinCmd
- *   let         := "let" IDENT "=" expr
- *   assign      := IDENT "=" expr
- *   if          := "if" expr block ("else" (if | block))?
- *   while       := "while" expr block
- *   for         := "for" IDENT "in" expr block
- *   fn          := "fn" IDENT "(" params? ")" block
- *   block       := "{" stmt* "}"
- *   expr        := or (||) and (&&) cmp (+- ...) ...
+ * 字句解析 → 再帰下降パーサ → AST 評価
+ * 値: null | boolean | number | string | array | function
+ * ブロックスコープ / 関数クロージャ / 行番号付きエラー
  */
 
 export class RuntimeError extends Error {
@@ -27,8 +13,6 @@ export class RuntimeError extends Error {
     this.name = 'RuntimeError'
   }
 }
-
-// ─── Lexer ───────────────────────────────────────────────
 
 const KEYWORDS = new Set([
   'let', 'if', 'else', 'while', 'for', 'in', 'fn', 'return',
@@ -58,19 +42,16 @@ function tokenize(source) {
       adv()
       continue
     }
-    // # line comment
     if (c === '#') {
       while (i < n && peek() !== '\n') adv()
       continue
     }
-    // // comment
     if (c === '/' && peek(1) === '/') {
       adv()
       adv()
       while (i < n && peek() !== '\n') adv()
       continue
     }
-    // string
     if (c === '"' || c === "'") {
       const quote = adv()
       let s = ''
@@ -95,7 +76,6 @@ function tokenize(source) {
       tokens.push({ type: 'string', value: s, line: startLine })
       continue
     }
-    // number
     if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(peek(1)))) {
       let num = ''
       const startLine = line
@@ -107,7 +87,6 @@ function tokenize(source) {
       tokens.push({ type: 'number', value: Number(num), line: startLine })
       continue
     }
-    // ident / keyword
     if (/[A-Za-z_]/.test(c)) {
       let id = ''
       const startLine = line
@@ -125,7 +104,6 @@ function tokenize(source) {
       }
       continue
     }
-    // two-char ops
     const two = c + peek(1)
     const TWO = {
       '==': 'eq',
@@ -147,7 +125,6 @@ function tokenize(source) {
       tokens.push({ type: TWO[two], line: startLine })
       continue
     }
-    // single
     const SINGLE = {
       '+': 'plus',
       '-': 'minus',
@@ -179,8 +156,6 @@ function tokenize(source) {
   tokens.push({ type: 'eof', line })
   return tokens
 }
-
-// ─── Parser ──────────────────────────────────────────────
 
 function parse(tokens) {
   let p = 0
@@ -215,7 +190,6 @@ function parse(tokens) {
     if (at('return')) return parseReturn()
     if (at('print')) return parsePrint()
     if (at('lbrace')) return parseBlock()
-    // assignment or expression statement
     const expr = parseExpr()
     if (match('assign')) {
       if (expr.type !== 'Ident' && expr.type !== 'Index') {
@@ -225,7 +199,6 @@ function parse(tokens) {
       match('semi')
       return { type: 'Assign', target: expr, value, line: expr.line }
     }
-    // compound assign
     for (const [op, name] of [
       ['plusEq', '+'],
       ['minusEq', '-'],
@@ -239,13 +212,7 @@ function parse(tokens) {
         return {
           type: 'Assign',
           target: expr,
-          value: {
-            type: 'Binary',
-            op: name,
-            left: expr,
-            right: value,
-            line: expr.line,
-          },
+          value: { type: 'Binary', op: name, left: expr, right: value, line: expr.line },
           line: expr.line,
         }
       }
@@ -466,8 +433,6 @@ function parse(tokens) {
   return parseProgram()
 }
 
-// ─── Runtime ─────────────────────────────────────────────
-
 class Environment {
   constructor(parent = null) {
     this.parent = parent
@@ -527,7 +492,7 @@ function repr(v) {
   if (typeof v === 'string') return v
   if (typeof v === 'boolean') return v ? 'true' : 'false'
   if (Array.isArray(v)) return '[' + v.map(repr).join(', ') + ']'
-  if (v && v.__fn) return `<fn ${v.name}>`
+  if (v && v.__fn) return '<fn ' + v.name + '>'
   if (typeof v === 'number') return String(v)
   return String(v)
 }
@@ -553,7 +518,7 @@ function makeBuiltins(printFn, envRoot) {
     str: (a) => repr(a),
     num: (a) => {
       const n = Number(a)
-      if (Number.isNaN(n)) throw new RuntimeError(`cannot convert to number: ${repr(a)}`)
+      if (Number.isNaN(n)) throw new RuntimeError('cannot convert to number: ' + repr(a))
       return n
     },
     abs: (a) => Math.abs(Number(a)),
@@ -563,7 +528,13 @@ function makeBuiltins(printFn, envRoot) {
     max: (...a) => Math.max(...a.map(Number)),
     now: () => new Date().toLocaleString('ja-JP'),
     env: () =>
-      `lang=${navigator.language} online=${navigator.onLine} ua=${navigator.userAgent.slice(0, 48)}…`,
+      'lang=' +
+      navigator.language +
+      ' online=' +
+      navigator.onLine +
+      ' ua=' +
+      navigator.userAgent.slice(0, 48) +
+      '…',
     push: (arr, v) => {
       if (!Array.isArray(arr)) throw new RuntimeError('push() expects array')
       arr.push(v)
@@ -688,10 +659,9 @@ function evaluate(node, env, ctx) {
       const a = evaluate(node.arg, env, ctx)
       if (node.op === '-') return -Number(a)
       if (node.op === '!') return !isTruthy(a)
-      throw new RuntimeError(`unknown unary ${node.op}`, node.line)
+      throw new RuntimeError('unknown unary ' + node.op, node.line)
     }
     case 'Binary': {
-      // short-circuit
       if (node.op === '&&') {
         const l = evaluate(node.left, env, ctx)
         return isTruthy(l) ? evaluate(node.right, env, ctx) : l
@@ -728,7 +698,7 @@ function evaluate(node, env, ctx) {
         case '>=':
           return l >= r
         default:
-          throw new RuntimeError(`unknown op ${node.op}`, node.line)
+          throw new RuntimeError('unknown op ' + node.op, node.line)
       }
     }
     case 'Call': {
@@ -738,7 +708,7 @@ function evaluate(node, env, ctx) {
       if (callee && callee.__fn) {
         if (args.length !== callee.params.length) {
           throw new RuntimeError(
-            `fn ${callee.name} expects ${callee.params.length} args, got ${args.length}`,
+            'fn ' + callee.name + ' expects ' + callee.params.length + ' args, got ' + args.length,
             node.line
           )
         }
@@ -752,7 +722,7 @@ function evaluate(node, env, ctx) {
           throw e
         }
       }
-      throw new RuntimeError(`not callable: ${typeName(callee)}`, node.line)
+      throw new RuntimeError('not callable: ' + typeName(callee), node.line)
     }
     case 'Index': {
       const obj = evaluate(node.object, env, ctx)
@@ -765,15 +735,10 @@ function evaluate(node, env, ctx) {
       throw new RuntimeError('cannot index ' + typeName(obj), node.line)
     }
     default:
-      throw new RuntimeError(`unknown node ${node.type}`, node.line || 0)
+      throw new RuntimeError('unknown node ' + node.type, node.line || 0)
   }
 }
 
-/**
- * @param {string} source
- * @param {{ print?: (s:string)=>void }} options
- * @returns {{ ok: boolean, output: string[], error?: string, vars: Record<string, unknown> }}
- */
 export function runPilotScript(source, options = {}) {
   const output = []
   const print = (s) => {
@@ -786,69 +751,62 @@ export function runPilotScript(source, options = {}) {
     const env = new Environment()
     const builtins = makeBuiltins(print, env)
     for (const [k, v] of Object.entries(builtins)) env.define(k, v)
-    // aliases
     env.define('help', () => {
       print(HELP_TEXT)
       return null
     })
-    env.define('clear', () => {
-      output.length = 0
-      print('(output buffer cleared for this run — UI clear is separate)')
-      return null
-    })
     evaluate(ast, env, { print })
     const vars = env.entries()
-    // strip builtins from dump
     const dump = {}
     for (const [k, v] of Object.entries(vars)) {
-      if (typeof v === 'function' || (v && v.__fn && builtins[k])) continue
-      if (builtins[k] !== undefined && typeof builtins[k] === 'function') continue
+      if (typeof v === 'function') continue
       if (k === 'help' || k === 'clear') continue
-      dump[k] = v && v.__fn ? `<fn ${v.name}>` : v
+      if (builtins[k] !== undefined) continue
+      dump[k] = v && v.__fn ? '<fn ' + v.name + '>' : v
     }
     return { ok: true, output, vars: dump }
   } catch (e) {
-    const msg = e instanceof RuntimeError || e.message ? e.message : String(e)
+    const msg = e && e.message ? e.message : String(e)
     output.push('Error: ' + msg)
     return { ok: false, output, error: msg, vars: {} }
   }
 }
 
-export const HELP_TEXT = `
-PilotScript v2
-──────────────
-Variables:
-  let x = 10
-  x = x + 1
-  x += 2
-
-Types: null, bool, number, string, array, fn
-
-Control:
-  if cond { ... } else { ... }
-  while cond { ... }
-  for i in 1..5 { ... }
-  for item in arr { ... }
-
-Functions:
-  fn add(a, b) { return a + b }
-  print add(2, 3)
-
-Arrays:
-  let a = [1, 2, 3]
-  print a[0]
-  push(a, 4)
-
-Strings: "hello ${name}"  (interpolation via print)
-
-Operators: + - * / %  == != < > <= >=  and or not
-
-Builtins:
-  print, len, type, str, num, abs, floor, ceil, min, max,
-  now, env, push, pop, join, keys, help()
-
-Comments: # ...  or  // ...
-`.trim()
+export const HELP_TEXT = [
+  'PilotScript v2',
+  '──────────────',
+  'Variables:',
+  '  let x = 10',
+  '  x = x + 1',
+  '  x += 2',
+  '',
+  'Types: null, bool, number, string, array, fn',
+  '',
+  'Control:',
+  '  if cond { ... } else { ... }',
+  '  while cond { ... }',
+  '  for i in 1..5 { ... }',
+  '  for item in arr { ... }',
+  '',
+  'Functions:',
+  '  fn add(a, b) { return a + b }',
+  '  print add(2, 3)',
+  '',
+  'Arrays:',
+  '  let a = [1, 2, 3]',
+  '  print a[0]',
+  '  push(a, 4)',
+  '',
+  'Strings: print "hello ${name}"  (interpolation)',
+  '',
+  'Operators: + - * / %  == != < > <= >=  and or not',
+  '',
+  'Builtins:',
+  '  print, len, type, str, num, abs, floor, ceil, min, max,',
+  '  now, env, push, pop, join, keys, help()',
+  '',
+  'Comments: # ...  or  // ...',
+].join('\n')
 
 export const SAMPLE = [
   '# PilotScript v2 sample',
@@ -860,17 +818,17 @@ export const SAMPLE = [
   '  return n * 2',
   '}',
   'let answer = double(a)',
-  'print "21 x 2 =" answer',
+  'print "21 x 2 =", answer',
   '',
   'let nums = [1, 2, 3, 4, 5]',
   'let sum = 0',
   'for n in nums {',
   '  sum = sum + n',
   '}',
-  'print "sum =" sum',
+  'print "sum =", sum',
   '',
   'for i in 1..3 {',
-  '  print "tick" i',
+  '  print "tick", i',
   '}',
   '',
   'if answer == 42 {',
@@ -879,5 +837,5 @@ export const SAMPLE = [
   '  print "unexpected"',
   '}',
   '',
-  'print type(answer) len(nums) now()',
+  'print type(answer), len(nums), now()',
 ].join('\n')
