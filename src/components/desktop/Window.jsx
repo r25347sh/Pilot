@@ -10,13 +10,23 @@ import SynthApp from './SynthApp'
 import MatrixApp from './MatrixApp'
 import NetLabApp from './NetLabApp'
 import RegexLabApp from './RegexLabApp'
+import ConsoleApp from './ConsoleApp'
 import ContextMenu from './ContextMenu'
 
-function AppContent({ app, settingsProps, storeProps, taskManagerProps, reloadNonce }) {
+function AppContent({
+  app,
+  settingsProps,
+  storeProps,
+  taskManagerProps,
+  consoleProps,
+  reloadNonce,
+}) {
   if (app.internal === 'settings') return <SettingsApp key={reloadNonce} {...settingsProps} />
   if (app.internal === 'store') return <StoreApp key={reloadNonce} {...storeProps} />
   if (app.internal === 'terminal') return <TerminalApp key={reloadNonce} />
-  if (app.internal === 'taskmanager') return <TaskManagerApp key={reloadNonce} {...taskManagerProps} />
+  if (app.internal === 'taskmanager')
+    return <TaskManagerApp key={reloadNonce} {...taskManagerProps} />
+  if (app.internal === 'console') return <ConsoleApp key={reloadNonce} {...consoleProps} />
   if (app.internal === 'notepad') return <NotepadApp key={reloadNonce} />
   if (app.internal === 'calculator') return <CalculatorApp key={reloadNonce} />
   if (app.internal === 'drawpad') return <DrawPadApp key={reloadNonce} />
@@ -24,7 +34,8 @@ function AppContent({ app, settingsProps, storeProps, taskManagerProps, reloadNo
   if (app.internal === 'matrix') return <MatrixApp key={reloadNonce} />
   if (app.internal === 'netlab') return <NetLabApp key={reloadNonce} />
   if (app.internal === 'regexlab') return <RegexLabApp key={reloadNonce} />
-  if (app.internal) return <div className="p-4 text-sm opacity-60">Unknown app: {app.internal}</div>
+  if (app.internal)
+    return <div className="p-4 text-sm opacity-60">Unknown app: {app.internal}</div>
   return null
 }
 
@@ -37,9 +48,11 @@ export default function Window({
   onMinimize,
   onToggleMaximize,
   onToggleFullscreen,
+  onOpenConsole,
   settingsProps,
   storeProps,
   taskManagerProps,
+  consoleProps,
 }) {
   const [isDragging, setIsDragging] = useState(false)
   const [resizeDir, setResizeDir] = useState(null)
@@ -54,6 +67,7 @@ export default function Window({
   const isMaxOrFull = state.isMaximized || state.isFullscreen
   const isMinimized = !!state.isMinimized
   const reloadNonce = state.reloadNonce || 0
+  const isSite = !app.internal
 
   const handleMouseDownTitle = (e) => {
     if (e.target.closest('button')) return
@@ -72,22 +86,32 @@ export default function Window({
   const handleTitleContext = (e) => {
     e.preventDefault()
     e.stopPropagation()
-    setCtx({
-      x: e.clientX,
-      y: e.clientY,
-      items: [
-        { label: '再読み込み (Ctrl+R)', icon: '🔄', onClick: () => onUpdate({ reloadNonce: reloadNonce + 1 }) },
-        { label: '最小化', icon: '─', onClick: onMinimize },
-        {
-          label: state.isMaximized ? '元のサイズに戻す' : '最大化',
-          icon: '□',
-          onClick: onToggleMaximize,
-        },
-        { label: '全画面切替', icon: '⛶', onClick: onToggleFullscreen },
-        { separator: true },
-        { label: '閉じる (Ctrl+W)', icon: '✕', onClick: onClose },
-      ],
-    })
+    const items = [
+      {
+        label: '再読み込み (Ctrl+R)',
+        icon: '🔄',
+        onClick: () => onUpdate({ reloadNonce: reloadNonce + 1 }),
+      },
+    ]
+    if (isSite || app.internal) {
+      items.push({
+        label: 'Console で検査',
+        icon: '🛠️',
+        onClick: () => onOpenConsole?.(),
+      })
+    }
+    items.push(
+      { label: '最小化', icon: '─', onClick: onMinimize },
+      {
+        label: state.isMaximized ? '元のサイズに戻す' : '最大化',
+        icon: '□',
+        onClick: onToggleMaximize,
+      },
+      { label: '全画面切替', icon: '⛶', onClick: onToggleFullscreen },
+      { separator: true },
+      { label: '閉じる (Ctrl+W)', icon: '✕', onClick: onClose }
+    )
+    setCtx({ x: e.clientX, y: e.clientY, items })
   }
 
   const startResize = (dir) => (e) => {
@@ -154,10 +178,7 @@ export default function Window({
     }
   }, [isDragging, resizeDir, handleMouseMove, handleMouseUp])
 
-  const titleBg = state.isFocused
-    ? 'bg-[var(--title-active)]'
-    : 'bg-[var(--title-inactive)]'
-
+  const titleBg = state.isFocused ? 'bg-[var(--title-active)]' : 'bg-[var(--title-inactive)]'
   const handleSize = 6
 
   return (
@@ -191,6 +212,7 @@ export default function Window({
         </span>
         <div className="flex h-full">
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation()
               onMinimize()
@@ -203,6 +225,7 @@ export default function Window({
             </svg>
           </button>
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation()
               onToggleMaximize()
@@ -222,6 +245,7 @@ export default function Window({
             )}
           </button>
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation()
               onClose()
@@ -244,6 +268,7 @@ export default function Window({
             settingsProps={settingsProps}
             storeProps={storeProps}
             taskManagerProps={taskManagerProps}
+            consoleProps={consoleProps}
             reloadNonce={reloadNonce}
           />
         ) : (
