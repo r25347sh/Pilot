@@ -41,12 +41,18 @@ export default function Window({
   const [ctx, setCtx] = useState(null)
   const dragOffset = useRef({ x: 0, y: 0 })
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0, left: 0, top: 0 })
+  // iframe の再読込防止: 初回マウント時の src を固定（親の再レンダーで差し替えない）
+  const iframeSrcRef = useRef(null)
+  if (iframeSrcRef.current == null && !app.internal) {
+    iframeSrcRef.current = app.external ? app.src : `${import.meta.env.BASE_URL}${app.src}`
+  }
 
   const isMaxOrFull = state.isMaximized || state.isFullscreen
+  const isMinimized = !!state.isMinimized
 
   const handleMouseDownTitle = (e) => {
     if (e.target.closest('button')) return
-    if (isMaxOrFull) return
+    if (isMaxOrFull || isMinimized) return
     onFocus()
     setIsDragging(true)
     dragOffset.current = { x: e.clientX - state.x, y: e.clientY - state.y }
@@ -54,6 +60,7 @@ export default function Window({
 
   const handleDoubleClickTitle = (e) => {
     if (e.target.closest('button')) return
+    if (isMinimized) return
     onToggleMaximize()
   }
 
@@ -80,7 +87,7 @@ export default function Window({
   const startResize = (dir) => (e) => {
     e.stopPropagation()
     e.preventDefault()
-    if (isMaxOrFull) return
+    if (isMaxOrFull || isMinimized) return
     onFocus()
     setResizeDir(dir)
     resizeStart.current = {
@@ -141,8 +148,7 @@ export default function Window({
     }
   }, [isDragging, resizeDir, handleMouseMove, handleMouseUp])
 
-  if (state.isMinimized) return null
-
+  // 最小化時も DOM に残す（return null すると iframe が破棄され毎回初期URLになる）
   const titleBg = state.isFocused
     ? 'bg-[var(--title-active)]'
     : 'bg-[var(--title-inactive)]'
@@ -160,8 +166,15 @@ export default function Window({
         width: state.width,
         height: state.height,
         zIndex: state.zIndex,
+        // 非表示だがアンマウントしない
+        visibility: isMinimized ? 'hidden' : 'visible',
+        pointerEvents: isMinimized ? 'none' : 'auto',
+        // レイアウト上も邪魔しない（フォーカス・クリック対象外）
+        transform: isMinimized ? 'scale(0)' : undefined,
+        transformOrigin: 'bottom left',
       }}
-      onMouseDown={onFocus}
+      aria-hidden={isMinimized}
+      onMouseDown={isMinimized ? undefined : onFocus}
     >
       <div
         className={`h-8 flex items-center select-none ${titleBg} ${isMaxOrFull ? '' : 'cursor-move'}`}
@@ -209,15 +222,25 @@ export default function Window({
       </div>
 
       <div className="flex-1 relative overflow-hidden bg-[var(--surface-bg)]">
-        <AppContent
-          app={app}
-          settingsProps={settingsProps}
-          storeProps={storeProps}
-          taskManagerProps={taskManagerProps}
-        />
+        {app.internal ? (
+          <AppContent
+            app={app}
+            settingsProps={settingsProps}
+            storeProps={storeProps}
+            taskManagerProps={taskManagerProps}
+          />
+        ) : (
+          <iframe
+            src={iframeSrcRef.current}
+            title={app.title}
+            className="absolute inset-0 w-full h-full border-0 bg-white"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
+            allow="fullscreen"
+          />
+        )}
       </div>
 
-      {!isMaxOrFull && (
+      {!isMaxOrFull && !isMinimized && (
         <>
           <div className="absolute top-0 left-0 cursor-nw-resize z-10" style={{ width: handleSize, height: handleSize }} onMouseDown={startResize('nw')} />
           <div className="absolute top-0 right-0 cursor-ne-resize z-10" style={{ width: handleSize, height: handleSize }} onMouseDown={startResize('ne')} />
@@ -231,7 +254,7 @@ export default function Window({
         </>
       )}
 
-      {ctx && (
+      {ctx && !isMinimized && (
         <ContextMenu x={ctx.x} y={ctx.y} items={ctx.items} onClose={() => setCtx(null)} />
       )}
     </div>
