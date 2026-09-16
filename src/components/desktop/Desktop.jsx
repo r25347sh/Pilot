@@ -1,7 +1,8 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import Taskbar from './Taskbar'
 import Window from './Window'
 import ContextMenu from './ContextMenu'
+import { resolveWallpaperStyle } from './SettingsApp'
 
 const ICON_H = 88
 const GRID = 8
@@ -25,6 +26,8 @@ export default function Desktop({
   settingsProps,
   storeProps,
   taskManagerProps,
+  consoleProps,
+  openConsoleFor,
   iconPositions,
   updateIconPosition,
 }) {
@@ -32,6 +35,8 @@ export default function Desktop({
   const [searchQuery, setSearchQuery] = useState('')
   const [ctxMenu, setCtxMenu] = useState(null)
   const dragRef = useRef(null)
+
+  const wallpaperStyle = useMemo(() => resolveWallpaperStyle(wallpaper), [wallpaper])
 
   const getPos = (app, index) => iconPositions[app.id] || defaultPos(index)
 
@@ -67,7 +72,9 @@ export default function Desktop({
       if (d?.moved) {
         const snap = (v) => Math.round(v / GRID) * GRID
         const x = snap(Math.max(0, d.origX + (d._lastDx || 0)))
-        const y = snap(Math.max(0, Math.min(window.innerHeight - 60 - ICON_H, d.origY + (d._lastDy || 0))))
+        const y = snap(
+          Math.max(0, Math.min(window.innerHeight - 60 - ICON_H, d.origY + (d._lastDy || 0)))
+        )
         updateIconPosition(app.id, { x, y })
       }
       dragRef.current = null
@@ -97,7 +104,7 @@ export default function Desktop({
         { separator: true },
         { label: '設定', icon: '⚙️', onClick: () => openApp('settings') },
         { label: 'ストア', icon: '🛒', onClick: () => openApp('store') },
-        { label: 'PilotTerm', icon: '⬛', onClick: () => openApp('terminal') },
+        { label: 'Console', icon: '🛠️', onClick: () => openConsoleFor?.(null) },
         { separator: true },
         { label: '検索', icon: '🔍', onClick: () => setSearchOpen(true) },
       ],
@@ -119,9 +126,14 @@ export default function Desktop({
           icon: '▶️',
           onClick: () => openApp(app.id),
         },
+        {
+          label: 'Console で検査',
+          icon: '🛠️',
+          onClick: () => openConsoleFor?.(app.id),
+        },
         { separator: true },
         {
-          label: '最小化（稼働継続）',
+          label: '最小化',
           icon: '─',
           disabled: !isOpen || isMin,
           onClick: () => minimizeApp(app.id),
@@ -137,7 +149,7 @@ export default function Desktop({
         },
         { separator: true },
         {
-          label: '閉じる（終了）',
+          label: '閉じる',
           icon: '✕',
           disabled: !isOpen,
           onClick: () => closeApp(app.id),
@@ -156,6 +168,11 @@ export default function Desktop({
       y: e.clientY,
       items: [
         { label: `${app.title} を開く`, icon: app.icon, onClick: () => openApp(app.id) },
+        {
+          label: 'Console で検査',
+          icon: '🛠️',
+          onClick: () => openConsoleFor?.(app.id),
+        },
         {
           label: isOpen && s.isMinimized ? 'ウィンドウを表示' : '最小化',
           icon: '─',
@@ -188,13 +205,14 @@ export default function Desktop({
       data-theme={resolvedTheme}
       onContextMenu={handleDesktopContext}
     >
-      <div className="absolute inset-0" style={{ background: wallpaper }} />
+      <div className="absolute inset-0" style={wallpaperStyle} />
 
       {apps.map((app, index) => {
         const pos = getPos(app, index)
         return (
           <button
             key={app.id}
+            type="button"
             onPointerDown={(e) => handleIconPointerDown(e, app, index)}
             onDoubleClick={() => handleIconDoubleClick(app.id)}
             onContextMenu={(e) => handleIconContext(e, app)}
@@ -225,16 +243,24 @@ export default function Desktop({
             onMinimize={() => minimizeApp(app.id)}
             onToggleMaximize={() => toggleMaximize(app.id)}
             onToggleFullscreen={() => toggleFullscreen(app.id)}
+            onOpenConsole={() => openConsoleFor?.(app.id)}
             settingsProps={settingsProps}
             storeProps={storeProps}
             taskManagerProps={taskManagerProps}
+            consoleProps={consoleProps}
           />
         )
       })}
 
       {searchOpen && (
         <>
-          <div className="absolute inset-0 z-[9990]" onClick={() => { setSearchOpen(false); setSearchQuery('') }} />
+          <div
+            className="absolute inset-0 z-[9990]"
+            onClick={() => {
+              setSearchOpen(false)
+              setSearchQuery('')
+            }}
+          />
           <div className="absolute bottom-14 left-1/2 -translate-x-1/2 w-[520px] max-w-[90vw] bg-[var(--panel-bg)] backdrop-blur-2xl rounded-xl shadow-2xl border border-[var(--panel-border)] z-[9991] overflow-hidden">
             <div className="p-4">
               <input
@@ -248,12 +274,19 @@ export default function Desktop({
             </div>
             <div className="px-3 pb-3 max-h-64 overflow-y-auto">
               {filteredApps.length === 0 ? (
-                <p className="text-[var(--surface-text)] opacity-40 text-sm text-center py-6">見つかりませんでした</p>
+                <p className="text-[var(--surface-text)] opacity-40 text-sm text-center py-6">
+                  見つかりませんでした
+                </p>
               ) : (
                 filteredApps.map((app) => (
                   <button
                     key={app.id}
-                    onClick={() => { openApp(app.id); setSearchOpen(false); setSearchQuery('') }}
+                    type="button"
+                    onClick={() => {
+                      openApp(app.id)
+                      setSearchOpen(false)
+                      setSearchQuery('')
+                    }}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[var(--hover-bg)] transition-colors text-left"
                   >
                     <span className="text-2xl">{app.icon}</span>
