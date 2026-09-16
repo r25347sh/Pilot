@@ -61,7 +61,9 @@ export default function App() {
         if (!cancelled) setReady(true)
       }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -139,7 +141,7 @@ export default function App() {
             zIndex: nextZ,
           }
         } else {
-          const isCompact = id === 'settings' || id === 'store' || id === 'taskmanager'
+          const compact = ['settings', 'store', 'taskmanager', 'calculator', 'notepad'].includes(id)
           updated[id] = {
             isOpen: true,
             isFocused: true,
@@ -147,11 +149,12 @@ export default function App() {
             isMaximized: false,
             isFullscreen: false,
             zIndex: nextZ,
-            x: 100 + Object.keys(prev).length * 28,
-            y: 50 + Object.keys(prev).length * 28,
-            width: isCompact ? 640 : 900,
-            height: isCompact ? 480 : 560,
+            x: 80 + (Object.keys(prev).length % 8) * 28,
+            y: 40 + (Object.keys(prev).length % 8) * 28,
+            width: compact ? 560 : 900,
+            height: compact ? 420 : 560,
             prevRect: null,
+            reloadNonce: 0,
           }
         }
         return updated
@@ -256,6 +259,80 @@ export default function App() {
       }
     })
   }, [])
+
+  const getFocusedId = useCallback(() => {
+    const entries = Object.entries(openApps).filter(([, s]) => s?.isOpen && !s.isMinimized)
+    if (!entries.length) return null
+    entries.sort((a, b) => (b[1].zIndex || 0) - (a[1].zIndex || 0))
+    const focused = entries.find(([, s]) => s.isFocused)
+    return focused ? focused[0] : entries[0][0]
+  }, [openApps])
+
+  const reloadFocused = useCallback(() => {
+    const id = getFocusedId()
+    if (!id) return
+    setOpenApps((prev) => {
+      const cur = prev[id]
+      if (!cur) return prev
+      return {
+        ...prev,
+        [id]: { ...cur, reloadNonce: (cur.reloadNonce || 0) + 1 },
+      }
+    })
+  }, [getFocusedId])
+
+  // Pilot OS 内ショートカット（ブラウザのリロード等を奪う）
+  useEffect(() => {
+    const onKey = (e) => {
+      const mod = e.ctrlKey || e.metaKey
+      const key = e.key.toLowerCase()
+
+      // Ctrl+R / F5 → フォーカスアプリの再読み込み（ページ全体はリロードしない）
+      if ((mod && key === 'r') || e.key === 'F5') {
+        e.preventDefault()
+        e.stopPropagation()
+        reloadFocused()
+        return
+      }
+
+      // Ctrl+W → フォーカスアプリを閉じる
+      if (mod && key === 'w') {
+        e.preventDefault()
+        const id = getFocusedId()
+        if (id) closeApp(id)
+        return
+      }
+
+      // Ctrl+M → 最小化
+      if (mod && key === 'm') {
+        e.preventDefault()
+        const id = getFocusedId()
+        if (id) minimizeApp(id)
+        return
+      }
+
+      // Ctrl+Shift+Esc → タスクマネ（インストール済みなら）
+      if (mod && e.shiftKey && e.key === 'Escape') {
+        e.preventDefault()
+        openApp('taskmanager')
+        return
+      }
+
+      // Alt+Tab → 開いているアプリを巡回
+      if (e.altKey && key === 'tab') {
+        e.preventDefault()
+        const ids = Object.keys(openApps).filter((id) => openApps[id]?.isOpen)
+        if (ids.length < 2) return
+        const focused = getFocusedId()
+        const idx = Math.max(0, ids.indexOf(focused))
+        const next = ids[(idx + 1) % ids.length]
+        focusApp(next)
+      }
+    }
+
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [openApps, reloadFocused, getFocusedId, closeApp, minimizeApp, openApp, focusApp])
 
   const settingsProps = {
     theme: themePref,
