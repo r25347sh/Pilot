@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import Desktop from './components/desktop/Desktop'
 import HomeScreen from './components/mobile/HomeScreen'
-import { WALLPAPERS } from './components/desktop/SettingsApp'
 import { mergeApps } from './apps/registry'
 import {
   getSettings,
@@ -12,7 +11,7 @@ import {
   setInstalledApps,
 } from './lib/storage'
 
-const DEFAULT_WALLPAPER = WALLPAPERS[0].value
+const DEFAULT_WALLPAPER = 'default'
 
 function getSystemTheme() {
   if (typeof window === 'undefined') return 'dark'
@@ -32,6 +31,7 @@ export default function App() {
   const [themePref, setThemePref] = useState('system')
   const [wallpaper, setWallpaper] = useState(DEFAULT_WALLPAPER)
   const [resolvedTheme, setResolvedTheme] = useState(getSystemTheme)
+  const [consoleTargetId, setConsoleTargetId] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -141,7 +141,14 @@ export default function App() {
             zIndex: nextZ,
           }
         } else {
-          const compact = ['settings', 'store', 'taskmanager', 'calculator', 'notepad'].includes(id)
+          const compact = [
+            'settings',
+            'store',
+            'taskmanager',
+            'calculator',
+            'notepad',
+            'console',
+          ].includes(id)
           updated[id] = {
             isOpen: true,
             isFocused: true,
@@ -151,8 +158,8 @@ export default function App() {
             zIndex: nextZ,
             x: 80 + (Object.keys(prev).length % 8) * 28,
             y: 40 + (Object.keys(prev).length % 8) * 28,
-            width: compact ? 560 : 900,
-            height: compact ? 420 : 560,
+            width: compact ? 640 : 900,
+            height: compact ? 480 : 560,
             prevRect: null,
             reloadNonce: 0,
           }
@@ -260,6 +267,26 @@ export default function App() {
     })
   }, [])
 
+  const openConsoleFor = useCallback(
+    (appId) => {
+      setConsoleTargetId(appId || null)
+      // 未インストールならストアから自動インストール相当で開く（カタログ定義を使う）
+      const has = apps.some((a) => a.id === 'console')
+      if (!has) {
+        installApp({
+          id: 'console',
+          title: 'Console',
+          icon: '🛠️',
+          internal: 'console',
+          experimental: true,
+        }).then(() => openApp('console'))
+      } else {
+        openApp('console')
+      }
+    },
+    [apps, installApp, openApp]
+  )
+
   const getFocusedId = useCallback(() => {
     const entries = Object.entries(openApps).filter(([, s]) => s?.isOpen && !s.isMinimized)
     if (!entries.length) return null
@@ -281,13 +308,11 @@ export default function App() {
     })
   }, [getFocusedId])
 
-  // Pilot OS 内ショートカット（ブラウザのリロード等を奪う）
   useEffect(() => {
     const onKey = (e) => {
       const mod = e.ctrlKey || e.metaKey
       const key = e.key.toLowerCase()
 
-      // Ctrl+R / F5 → フォーカスアプリの再読み込み（ページ全体はリロードしない）
       if ((mod && key === 'r') || e.key === 'F5') {
         e.preventDefault()
         e.stopPropagation()
@@ -295,7 +320,15 @@ export default function App() {
         return
       }
 
-      // Ctrl+W → フォーカスアプリを閉じる
+      // F12 → Console（フォーカス中アプリをターゲット）
+      if (e.key === 'F12') {
+        e.preventDefault()
+        e.stopPropagation()
+        const id = getFocusedId()
+        openConsoleFor(id && id !== 'console' ? id : null)
+        return
+      }
+
       if (mod && key === 'w') {
         e.preventDefault()
         const id = getFocusedId()
@@ -303,7 +336,6 @@ export default function App() {
         return
       }
 
-      // Ctrl+M → 最小化
       if (mod && key === 'm') {
         e.preventDefault()
         const id = getFocusedId()
@@ -311,14 +343,12 @@ export default function App() {
         return
       }
 
-      // Ctrl+Shift+Esc → タスクマネ（インストール済みなら）
       if (mod && e.shiftKey && e.key === 'Escape') {
         e.preventDefault()
         openApp('taskmanager')
         return
       }
 
-      // Alt+Tab → 開いているアプリを巡回
       if (e.altKey && key === 'tab') {
         e.preventDefault()
         const ids = Object.keys(openApps).filter((id) => openApps[id]?.isOpen)
@@ -332,7 +362,16 @@ export default function App() {
 
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [openApps, reloadFocused, getFocusedId, closeApp, minimizeApp, openApp, focusApp])
+  }, [
+    openApps,
+    reloadFocused,
+    getFocusedId,
+    closeApp,
+    minimizeApp,
+    openApp,
+    focusApp,
+    openConsoleFor,
+  ])
 
   const settingsProps = {
     theme: themePref,
@@ -355,6 +394,13 @@ export default function App() {
     closeApp,
   }
 
+  const targetApp = consoleTargetId ? apps.find((a) => a.id === consoleTargetId) || null : null
+
+  const consoleProps = {
+    targetApp,
+    apps,
+  }
+
   const commonProps = {
     apps,
     openApps,
@@ -370,6 +416,8 @@ export default function App() {
     settingsProps,
     storeProps,
     taskManagerProps,
+    consoleProps,
+    openConsoleFor,
     iconPositions,
     updateIconPosition,
   }
