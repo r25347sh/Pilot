@@ -45,6 +45,15 @@ export const BASE_APPS = [
 /** ストア試験的拡張 */
 export const STORE_CATALOG = [
   {
+    id: 'console',
+    title: 'Console',
+    icon: '🛠️',
+    internal: 'console',
+    description:
+      'F12 風コンソール。log キャプチャ・JS 評価。サイト系ウィンドウの右クリックから対象アプリを紐付け可能。',
+    experimental: true,
+  },
+  {
     id: 'terminal',
     title: 'PilotTerm',
     icon: '⬛',
