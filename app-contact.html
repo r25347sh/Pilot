@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: #fff;
+      min-height: 100vh;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .form-card {
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(12px);
+      border-radius: 1.5rem;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 400px;
+    }
+    h1 { text-align: center; margin-bottom: 1.5rem; }
+    input, textarea {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      border: none;
+      border-radius: 0.75rem;
+      background: rgba(255,255,255,0.9);
+      color: #333;
+      font-size: 1rem;
+    }
+    button {
+      width: 100%;
+      padding: 0.85rem;
+      border: none;
+      border-radius: 0.75rem;
+      background: #fff;
+      color: #f5576c;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="form-card">
+    <h1>Contact</h1>
+    <input type="text" placeholder="お名前" />
+    <input type="email" placeholder="メールアドレス" />
+    <textarea rows="4" placeholder="メッセージ"></textarea>
+    <button type="button">送信（ダミー）</button>
+  </div>
+</body>
+</html>
